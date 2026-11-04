@@ -472,6 +472,7 @@ function render() {
   $('#view-sub').textContent = '';
   const views = { dashboard: viewDashboard, health: viewHealth, habits: viewHabits, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
   document.body.dataset.view = r.name;
+  $('#mode-pill').hidden = !['dashboard', 'today'].includes(r.name);
   (views[r.name] || viewDashboard)();
   document.title = $('#view-title').textContent + ' · NTD’s';
   const c = counts();
@@ -731,31 +732,35 @@ function layoutColumns(items) {
 }
 
 function viewWeek() {
-  const monday = S.route.arg && /^\d{4}-\d{2}-\d{2}$/.test(S.route.arg) ? mondayOf(S.route.arg) : mondayOf(S.today);
-  const sunday = addDays(monday, 6);
-  const isThis = monday === mondayOf(S.today);
-  const [, m1, d1] = monday.split('-').map(Number);
-  const [, m2, d2] = sunday.split('-').map(Number);
-  const tasksInWeek = scoped().filter((t) => t.due_date >= monday && t.due_date <= sunday);
-  const mins = tasksInWeek.reduce((n, t) => n + (t.duration_min || 0), 0);
-  setTitle(isThis ? 'Diese Woche' : `KW ${isoWeekNo(monday)}`, `${d1}. ${MONTHS[m1 - 1].slice(0, 3)} – ${d2}. ${MONTHS[m2 - 1].slice(0, 3)} · ${tasksInWeek.length} Aufgaben${mins ? ' · ' + fmtMins(mins) : ''}`);
-  $('#top-actions').innerHTML = `<div class="week-nav"><a class="icon-btn" href="#/week/${addDays(monday, -7)}" aria-label="Vorherige Woche">${icon('left')}</a>${isThis ? '' : '<a class="btn sm" href="#/week">Heute</a>'}<a class="icon-btn" href="#/week/${addDays(monday, 7)}" aria-label="Nächste Woche">${icon('right')}</a></div>`;
+  const span = [1, 3, 7].includes(+store.get('weekSpan', 7)) ? +store.get('weekSpan', 7) : 7;
+  const argDate = S.route.arg && /^\d{4}-\d{2}-\d{2}$/.test(S.route.arg) ? S.route.arg : null;
+  const start = span === 7 ? mondayOf(argDate || S.today) : argDate || S.today;
+  const end = addDays(start, span - 1);
+  const containsToday = start <= S.today && S.today <= end;
+  const [, m1, d1] = start.split('-').map(Number);
+  const [, m2, d2] = end.split('-').map(Number);
+  const tasksIn = scoped().filter((t) => t.due_date >= start && t.due_date <= end);
+  const mins = tasksIn.reduce((n, t) => n + (t.duration_min || 0), 0);
+  const range = span === 1 ? fmtLongDate(start) : `${d1}. ${MONTHS[m1 - 1].slice(0, 3)} – ${d2}. ${MONTHS[m2 - 1].slice(0, 3)}`;
+  const title = span === 7 ? (containsToday ? 'Diese Woche' : `KW ${isoWeekNo(start)}`) : span === 3 ? '3 Tage' : relDate(start, S.today);
+  setTitle(title, `${range} · ${tasksIn.length} Aufg.${mins ? ' · ' + fmtShort(mins) : ''}`);
+  const back = addDays(start, -span), fwd = addDays(start, span);
+  $('#top-actions').innerHTML = `<div class="week-nav"><a class="icon-btn" href="#/week/${back}" aria-label="Zurück">${icon('left')}</a>${containsToday ? '' : '<a class="btn sm" href="#/week">Heute</a>'}<a class="icon-btn" href="#/week/${fwd}" aria-label="Weiter">${icon('right')}</a></div>`;
   const draw = (data) => {
     const evs = data?.events || [];
-    let html = isThis ? statsHtml() : '';
-    html += '<div class="week">';
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(monday, i);
+    let html = `<div class="span-switch" role="tablist">${[1, 3, 7].map((n) => `<button class="${n === span ? 'on' : ''}" data-span="${n}">${n === 1 ? '1 Tag' : n + ' Tage'}</button>`).join('')}</div>`;
+    html += `<div class="week span-${span}">`;
+    for (let i = 0; i < span; i++) {
+      const d = addDays(start, i);
       const isToday = d === S.today;
-      const thisWeek = monday <= S.today && S.today <= sunday;
-      let dayTasks = scoped().filter((t) => t.due_date === d && !(thisWeek && d < S.today));
+      let dayTasks = scoped().filter((t) => t.due_date === d && !(containsToday && d < S.today));
       if (isToday) dayTasks = [...scoped().filter((t) => t.due_date && t.due_date < S.today), ...dayTasks];
       dayTasks = sortTasks(dayTasks);
       const dayEv = eventsOn(evs, d);
       const load = dayTasks.filter((t) => t.due_date === d).reduce((n, t) => n + (t.duration_min || 0), 0);
-      if (d < S.today && !dayTasks.length && !dayEv.length && window.innerWidth < 860) continue;
+      if (span === 7 && d < S.today && !dayTasks.length && !dayEv.length && window.innerWidth < 860) continue;
       html += `<div class="day-col${isToday ? ' is-today' : ''}${d < S.today ? ' is-past' : ''}" data-day="${d}">
-        <div class="day-head"><div><div class="wd">${WD_SHORT[i + 1]}</div><div class="dn">${+d.slice(8, 10)}.</div></div><div class="load">${dayTasks.length ? dayTasks.length + (dayTasks.length === 1 ? ' Aufgabe' : ' Aufgaben') : ''}${load ? '<br>' + fmtShort(load) : ''}</div></div>
+        <div class="day-head"><div><div class="wd">${WD_SHORT[isoWeekday(d)]}${span === 1 ? ' · ' + relDate(d, S.today) : ''}</div><div class="dn">${+d.slice(8, 10)}.</div></div><div class="load">${dayTasks.length ? dayTasks.length + (dayTasks.length === 1 ? ' Aufgabe' : ' Aufgaben') : ''}${load ? '<br>' + fmtShort(load) : ''}</div></div>
         <div class="day-body">
           ${dayEv.map((e) => `<div class="ev" style="--c:${esc(e.color)}" data-url="${esc(e.url || '')}"><b>${esc(e.title)}</b><small>${e.allDay ? 'ganztägig' : timeOf(e.start) + '–' + timeOf(e.end)}</small></div>`).join('')}
           ${dayTasks.map((t) => `<div class="wtask prio-${t.priority}" data-task="${t.id}" draggable="true"><button class="check" data-check="${t.id}" aria-label="Erledigen"></button><div class="tt">${esc(t.title)}<small>${[t.due_date < d ? '<span style="color:var(--danger)">überfällig</span>' : '', t.due_time || '', t.duration_min ? fmtDuration(t.duration_min) : '', t.recurrence ? '↻' : '', t.deadline ? `<span class="deadline ${deadlineInfo(t.deadline).cls}">🎯 ${+t.deadline.slice(8, 10)}.${+t.deadline.slice(5, 7)}.</span>` : ''].filter(Boolean).join(' · ')}</small></div></div>`).join('')}
@@ -767,7 +772,7 @@ function viewWeek() {
     $('#content').innerHTML = html;
     bindWeekDnD();
   };
-  const from = monday, to = addDays(monday, 7);
+  const from = start, to = addDays(start, span);
   draw(cachedEvents(from, to));
   const routeAtStart = location.hash;
   events(from, to).then((d) => { if (location.hash === routeAtStart && S.route.name === 'week') draw(d); });
@@ -2153,6 +2158,8 @@ function bindGlobal() {
     }
     if (el.closest('#search-btn')) return go('#/search');
     if (el.closest('#mode-pill')) return openModeMenu();
+    const sp = el.closest('[data-span]');
+    if (sp) { store.set('weekSpan', +sp.dataset.span); return go('#/week'); }
     if (el.closest('#focus-pill') || el.closest('[data-focus-panel]')) return openFocusPanel();
     const fs = el.closest('[data-focus-start]');
     if (fs) return startFocusFor(byId(fs.dataset.focusStart));

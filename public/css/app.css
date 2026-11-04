@@ -847,3 +847,33 @@ body[data-bg="photo"][data-view="today"] :is(.stat, .panel) { background: color-
   .sync.ok { width: 46px; height: 46px; }
   .mode-pill { padding: 0; width: 46px; height: 46px; justify-content: center; font-size: 20px; }
 }
+
+/* ---------- week span switch (1 / 3 / 7 days) ---------- */
+.span-switch { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; margin: 2px 0 14px; }
+.span-switch button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600; font-size: 14px; padding: 7px 16px; border-radius: 9px; cursor: pointer; }
+.span-switch button.on { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+.week.span-1 { grid-template-columns: minmax(0, 1fr) !important; max-width: 760px; }
+.week.span-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.week.span-1 .wtask, .week.span-1 .ev { font-size: 15px; padding: 9px 10px; }
+@media (max-width: 860px) {
+  .week.span-3 { gap: 6px; }
+  .week.span-3 .day-head { padding: 8px; }
+  .week.span-3 .day-head .load { display: none; }
+  .week.span-3 .day-body { padding: 4px; }
+  .week.span-3 .wtask { font-size: 13px; padding: 6px 3px; gap: 5px; }
+  .week.span-3 .ev { font-size: 12px; padding: 5px; }
+  .week.span-3 .add-inline span { display: none; }
+}
+@media (pointer: coarse) { .span-switch button { font-size: 16px; padding: 10px 18px; } }
+
+/* ---------- smaller, calmer status controls ---------- */
+.mode-pill[hidden] { display: none !important; }
+@media (max-width: 1250px) {
+  .mode-pill { width: auto !important; height: auto !important; padding: 5px 8px !important; font-size: 15px !important; background: transparent !important; border-color: var(--line) !important; }
+  .sync.ok { width: 30px !important; height: 30px !important; border-color: transparent !important; background: transparent !important; }
+  .sync.ok .sync-dot { width: 9px; height: 9px; }
+}
+@media (pointer: coarse) and (max-width: 1250px) {
+  .mode-pill { padding: 6px 9px !important; font-size: 17px !important; }
+  .sync.ok { width: 34px !important; height: 34px !important; }
+}
