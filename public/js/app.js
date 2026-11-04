@@ -334,7 +334,7 @@ function render() {
   $('#view-sub').textContent = '';
   const views = { today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
   (views[r.name] || viewToday)();
-  document.title = $('#view-title').textContent + ' · To-Do';
+  document.title = $('#view-title').textContent + ' · NTD’s';
   const c = counts();
   if ('setAppBadge' in navigator) {
     const n = c.today + c.overdue;

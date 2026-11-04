@@ -377,7 +377,7 @@ async function handleRpc(env, msg) {
       return result({
         protocolVersion: PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'todo', title: 'Meine To-Dos', version: '1.0.0' },
+        serverInfo: { name: 'todo', title: 'NTD’s – Nic’s To-Do’s', version: '1.0.0' },
         instructions: 'Persönliche To-Do-App des Nutzers (Zeitzone Europe/Berlin). Starte bei Fragen zum Tag mit get_overview. Prioritäten: 1 = dringend/rot … 4 = keine. Daten immer als YYYY-MM-DD, Uhrzeiten HH:MM.',
       });
     }

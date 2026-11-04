@@ -1,6 +1,6 @@
 {
-  "name": "To-Do",
-  "short_name": "To-Do",
+  "name": "NTD’s – Nic’s To-Do’s",
+  "short_name": "NTD’s",
   "start_url": "/#/today",
   "scope": "/",
   "display": "standalone",

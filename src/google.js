@@ -151,7 +151,7 @@ export async function sendMail(env, subject, html) {
   const encSubject = '=?UTF-8?B?' + btoa(String.fromCharCode(...new TextEncoder().encode(subject))) + '?=';
   const raw = [
     `To: ${env.OWNER_EMAIL}`,
-    `From: To-Do <${env.OWNER_EMAIL}>`,
+    `From: NTD’s <${env.OWNER_EMAIL}>`,
     `Subject: ${encSubject}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
