@@ -2,6 +2,7 @@
 import { ensureSetting, getTask, getSetting, listOpenTasks } from './tasks.js';
 import { generateVapidKeys, sendPush } from './push.js';
 import { sendMail } from './google.js';
+import { localNow, addDays } from './time.js';
 
 export async function getVapid(env) {
   const json = await ensureSetting(env, 'vapid', async () => JSON.stringify(await generateVapidKeys()));
@@ -35,8 +36,22 @@ function dueText(task) {
   return `${d}.${m}.${y}${task.due_time ? ', ' + task.due_time + ' Uhr' : ''}`;
 }
 
-function mailHtml(task, origin, reason) {
-  return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:auto;padding:24px;color:#0f172a">
+/** Short text Gmail shows in the inbox list, e.g. "Heute um 18:15 Uhr · 30 Min. · Prio 1" */
+function previewText(task, tz) {
+  const today = localNow(tz).date;
+  let when = '';
+  if (task.due_date) {
+    const day = task.due_date === today ? 'Heute' : task.due_date === addDays(today, 1) ? 'Morgen' : dueText({ due_date: task.due_date });
+    when = task.due_time ? `${day} um ${task.due_time} Uhr` : `${day} fällig`;
+  }
+  return [when, task.duration_min ? task.duration_min + ' Min.' : '', PRIO[task.priority], task.notes ? task.notes.split('\n')[0].slice(0, 80) : '']
+    .filter(Boolean).join(' · ');
+}
+
+function mailHtml(task, origin, reason, preview) {
+  // hidden preheader + filler so Gmail does not append the body text to the preview
+  const pre = `<div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:transparent">${esc(preview)}${'&#847;&zwnj;&nbsp;'.repeat(60)}</div>`;
+  return `${pre}<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:auto;padding:24px;color:#0f172a">
   <div style="font-size:12px;color:#dc2626;font-weight:700;letter-spacing:.06em;text-transform:uppercase">${esc(reason)}</div>
   <h2 style="margin:8px 0 4px;font-size:20px">${esc(task.title)}</h2>
   <div style="color:#475569;font-size:14px">${esc(dueText(task))}${task.duration_min ? ' · ' + task.duration_min + ' Min.' : ''}</div>
@@ -57,7 +72,7 @@ async function notifyTask(env, task, { email, reason }) {
   let mailed = false;
   if (email) {
     try {
-      await sendMail(env, `⏰ ${task.title}`, mailHtml(task, origin, reason));
+      await sendMail(env, `⏰ ${task.title}`, mailHtml(task, origin, reason, (reason !== 'Erinnerung' ? reason + ' · ' : '') + previewText(task, env.TIMEZONE)));
       mailed = true;
     } catch (e) {
       console.warn('mail failed', e.message);
