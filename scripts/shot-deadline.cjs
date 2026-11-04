@@ -1,0 +1,21 @@
+const { chromium, devices } = require('playwright');
+const OUT = process.argv[2];
+(async () => {
+  const b = await chromium.launch();
+  const ctx = await b.newContext({ ...devices['iPhone 15 Pro Max'], colorScheme: 'dark', locale: 'de-DE' });
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  await p.route('**/api/calendar*', (r) => r.fulfill({ json: { connected: true, events: [] } }));
+  await p.goto('http://localhost:8787/auth/dev'); await p.waitForSelector('.stats');
+  const api = (path, method, body) => p.evaluate(([path, method, body]) => fetch('/api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()), [path, method, body]);
+  await api('/tasks', 'POST', { title: 'KW 47 Tourenplan erstellen', due_date: '2026-11-04', priority: 2, deadline: '2026-11-06' });
+  await api('/tasks', 'POST', { title: 'DXM-Rechnung prüfen', due_date: '2026-11-04', priority: 1, deadline: '2026-11-03' });
+  await api('/tasks', 'POST', { title: 'SIP-Planung 2027', due_date: '2026-11-04', priority: 3, deadline: '2026-12-06' });
+  await p.reload(); await p.waitForSelector('.stats'); await p.waitForTimeout(300);
+  await p.evaluate(() => window.scrollTo(0, 330)); await p.waitForTimeout(200);
+  await p.screenshot({ path: OUT + '/dl-list.png' });
+  await p.click('.task:has-text("KW 47") .t-title'); await p.waitForTimeout(400);
+  await p.evaluate(() => document.querySelector('#drawer-panel').scrollTo(0, 450)); await p.waitForTimeout(200);
+  await p.screenshot({ path: OUT + '/dl-detail.png' });
+  await b.close();
+})();

@@ -65,6 +65,7 @@ export function rowToTask(r) {
     recurrence: r.recurrence ? JSON.parse(r.recurrence) : null,
     labels: JSON.parse(r.labels || '[]'),
     reminders: JSON.parse(r.reminders || '[]'),
+    deadline: r.deadline || null,
     place_id: r.place_id,
     place_event: r.place_event,
     sort: r.sort,
@@ -90,14 +91,56 @@ function normRecurrence(rec, dueDate) {
   return out;
 }
 
-function normReminders(list) {
-  if (!Array.isArray(list)) return [];
+/**
+ * Accepts many reminder shapes (Claude and the app send different ones) and normalizes to
+ * {before: minutes} or {at: 'YYYY-MM-DDTHH:MM'} (local time). Invalid entries raise an error
+ * instead of being dropped silently.
+ *   {before: 15} | {before: "15"} | {minutes_before: 30} | 15            -> 15 min before due time
+ *   {at: "2026-11-05T09:00"} | "...T09:00:00" | "...T08:00:00Z" | "...+01:00" | "2026-11-05 09:00"
+ *   {time: "09:00"} | "09:00"                                            -> on the due date at 09:00
+ */
+function normReminders(list, { tz, dueDate, hasTime }) {
+  if (list === null || list === undefined) return [];
+  if (!Array.isArray(list)) list = [list];
   const out = [];
-  for (const r of list.slice(0, 10)) {
-    if (r && Number.isFinite(Number(r.before))) out.push({ before: Math.max(0, Math.min(10080, Math.round(Number(r.before)))) });
-    else if (r && typeof r.at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(r.at)) out.push({ at: r.at });
+  for (let r of list.slice(0, 10)) {
+    if (typeof r === 'number' || (typeof r === 'string' && /^\d+$/.test(r.trim()))) r = { before: Number(r) };
+    else if (typeof r === 'string') r = /^\d{1,2}:\d{2}$/.test(r.trim()) ? { time: r.trim() } : { at: r.trim() };
+    if (!r || typeof r !== 'object') throw new InputError('Ungültige Erinnerung: ' + JSON.stringify(r));
+    const before = r.before ?? r.minutes_before ?? r.minutes;
+    if (before !== undefined && before !== null && before !== '') {
+      const m = Math.round(Number(before));
+      if (!Number.isFinite(m) || m < 0 || m > 10080) throw new InputError('Erinnerung: "before" muss 0–10080 Minuten sein');
+      if (!hasTime) throw new InputError('Erinnerung "X Min. vorher" braucht eine Uhrzeit (due_time). Alternativ {at: "YYYY-MM-DDTHH:MM"} nutzen.');
+      out.push({ before: m });
+      continue;
+    }
+    if (r.time) {
+      const t = String(r.time).trim().padStart(5, '0');
+      if (!TIME_RE.test(t)) throw new InputError('Erinnerung: Uhrzeit im Format HH:MM');
+      if (!dueDate) throw new InputError('Erinnerung mit nur Uhrzeit braucht ein Fälligkeitsdatum');
+      out.push({ at: `${dueDate}T${t}` });
+      continue;
+    }
+    const at = r.at ?? r.datetime ?? r.date_time;
+    if (typeof at === 'string' && at.trim()) {
+      const v = at.trim();
+      if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(v)) {
+        const d = new Date(v);
+        if (isNaN(d)) throw new InputError('Erinnerung: ungültiges Datum ' + v);
+        const l = localNow(tz, d);
+        out.push({ at: `${l.date}T${l.time}` });
+        continue;
+      }
+      const m = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+      if (!m) throw new InputError('Erinnerung: Format "YYYY-MM-DDTHH:MM" erwartet, bekommen: ' + v);
+      out.push({ at: `${m[1]}T${m[2].padStart(2, '0')}:${m[3]}` });
+      continue;
+    }
+    throw new InputError('Erinnerung braucht "before" (Minuten vor due_time) oder "at" (YYYY-MM-DDTHH:MM)');
   }
-  return out;
+  // de-duplicate
+  return out.filter((x, i) => out.findIndex((y) => JSON.stringify(y) === JSON.stringify(x)) === i);
 }
 
 function normLabels(list) {
@@ -141,7 +184,15 @@ async function toColumns(env, input, existing) {
     c.recurrence = c.recurrence ? JSON.stringify(c.recurrence) : null;
   }
   if (has('labels')) c.labels = JSON.stringify(normLabels(input.labels));
-  if (has('reminders')) c.reminders = JSON.stringify(normReminders(input.reminders));
+  if (has('deadline')) {
+    if (input.deadline && !DATE_RE.test(input.deadline)) throw new InputError('deadline: Format YYYY-MM-DD');
+    c.deadline = input.deadline || null;
+  }
+  if (has('reminders')) {
+    const dueDate = c.due_date !== undefined ? c.due_date : existing?.due_date;
+    const dueTime = c.due_time !== undefined ? c.due_time : existing?.due_time;
+    c.reminders = JSON.stringify(normReminders(input.reminders, { tz: env.TIMEZONE, dueDate, hasTime: !!(dueDate && dueTime) }));
+  }
   if (has('project_id')) {
     const pid = input.project_id || 'inbox';
     const p = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(pid).first();
@@ -397,24 +448,26 @@ export async function deletePlace(env, id) {
  */
 export async function scheduleNotifications(env, task) {
   await env.DB.prepare('DELETE FROM notifications WHERE task_id = ? AND sent_at IS NULL').bind(task.id).run();
-  if (task.completed_at || !task.due_date) return;
+  if (task.completed_at) return;
   const s = await getUserSettings(env);
   const tz = env.TIMEZONE;
   const email = task.priority === 1 && !task.recurrence && s.mail_enabled ? 1 : 0;
-  const instants = [];
-  const dueAt = task.due_time ? zonedToUtc(task.due_date, task.due_time, tz) : null;
+  const items = []; // [Date, kind]
+  const dueAt = task.due_date && task.due_time ? zonedToUtc(task.due_date, task.due_time, tz) : null;
   for (const r of task.reminders) {
-    if (r.at) instants.push(zonedToUtc(r.at.slice(0, 10), r.at.slice(11, 16), tz));
-    else if (dueAt && r.before !== undefined) instants.push(new Date(dueAt.getTime() - r.before * 60000));
+    if (r.at) items.push([zonedToUtc(r.at.slice(0, 10), r.at.slice(11, 16), tz), 'reminder']);
+    else if (dueAt && r.before !== undefined) items.push([new Date(dueAt.getTime() - r.before * 60000), 'reminder']);
   }
-  if (!task.reminders.length) {
-    if (dueAt) instants.push(new Date(dueAt.getTime() - s.default_reminder_min * 60000));
-    else if (email) instants.push(zonedToUtc(task.due_date, s.p1_mail_time, tz));
+  if (!task.reminders.length && task.due_date) {
+    if (dueAt) items.push([new Date(dueAt.getTime() - s.default_reminder_min * 60000), 'reminder']);
+    else if (email) items.push([zonedToUtc(task.due_date, s.p1_mail_time, tz), 'reminder']);
   }
+  // deadline day: heads-up in the morning (unless the task is already scheduled for that moment)
+  if (task.deadline) items.push([zonedToUtc(task.deadline, s.p1_mail_time, tz), 'deadline']);
   const now = Date.now();
-  for (const at of instants) {
+  for (const [at, kind] of items) {
     if (at.getTime() < now - 60000) continue; // never notify for the past
-    await env.DB.prepare('INSERT OR IGNORE INTO notifications (task_id, fire_at, email) VALUES (?, ?, ?)')
-      .bind(task.id, at.toISOString(), email).run();
+    await env.DB.prepare('INSERT OR IGNORE INTO notifications (task_id, fire_at, email, kind) VALUES (?, ?, ?, ?)')
+      .bind(task.id, at.toISOString(), email, kind).run();
   }
 }

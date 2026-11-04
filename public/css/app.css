@@ -611,3 +611,10 @@ mark { background: color-mix(in srgb, var(--p2) 30%, transparent); color: inheri
 .dlg-check span { display: flex; flex-direction: column; font-size: 15px; }
 .dlg-check small { color: var(--muted); font-size: 13px; }
 @media (pointer: coarse) { .dlg-check input { width: 26px; height: 26px; } .dlg-check span { font-size: 16.5px; } }
+
+/* ---------- deadline ---------- */
+.t-meta .deadline { color: var(--p3); }
+.t-meta .deadline.soon, .deadline.soon { color: var(--p2); font-weight: 600; }
+.t-meta .deadline.overdue, .deadline.overdue { color: var(--danger); font-weight: 600; }
+.deadline-hint { font-size: 13px; color: var(--muted); }
+@media (pointer: coarse) { #add-reminder { max-width: none !important; } }

@@ -62,9 +62,10 @@ function mailHtml(task, origin, reason, preview) {
 
 async function notifyTask(env, task, { email, reason }) {
   const origin = await getSetting(env, 'origin');
-  const body = [dueText(task), task.notes ? task.notes.slice(0, 120) : ''].filter(Boolean).join(' · ');
+  const isDeadline = reason.includes('Deadline');
+  const body = [isDeadline ? reason : '', dueText(task), task.notes ? task.notes.slice(0, 120) : ''].filter(Boolean).join(' · ');
   const push = await pushAll(env, {
-    title: (task.priority === 1 ? '🔴 ' : '') + task.title,
+    title: (isDeadline ? '🎯 ' : task.priority === 1 ? '🔴 ' : '') + task.title,
     body: body || reason,
     tag: 'task-' + task.id,
     url: '/#/task/' + task.id,
@@ -72,7 +73,7 @@ async function notifyTask(env, task, { email, reason }) {
   let mailed = false;
   if (email) {
     try {
-      await sendMail(env, `⏰ ${task.title}`, mailHtml(task, origin, reason, (reason !== 'Erinnerung' ? reason + ' · ' : '') + previewText(task, env.TIMEZONE)));
+      await sendMail(env, `${isDeadline ? '🎯' : '⏰'} ${task.title}`, mailHtml(task, origin, reason, (reason !== 'Erinnerung' ? reason + ' · ' : '') + previewText(task, env.TIMEZONE)));
       mailed = true;
     } catch (e) {
       console.warn('mail failed', e.message);
@@ -95,7 +96,7 @@ export async function runDueNotifications(env) {
     const late = now.getTime() - new Date(n.fire_at).getTime() > 3 * 3600 * 1000;
     if (late) continue; // skip anything hours late (e.g. after downtime)
     const task = await getTask(env, n.task_id);
-    if (task) await notifyTask(env, task, { email: !!n.email, reason: 'Erinnerung' });
+    if (task) await notifyTask(env, task, { email: !!n.email, reason: n.kind === 'deadline' ? '🎯 Deadline heute' : 'Erinnerung' });
   }
   // housekeeping: drop sent notifications older than 30 days
   if (now.getUTCMinutes() === 0) {

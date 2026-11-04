@@ -44,6 +44,7 @@ const P = {
   ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>',
 };
 const icon = (name, extra = '') => `<svg viewBox="0 0 24 24" ${extra}>${P[name].replace('{d}', S.today ? +S.today.slice(8, 10) : '')}</svg>`;
@@ -454,10 +455,17 @@ function dueClass(t) {
   return '';
 }
 
+function deadlineInfo(d) {
+  const days = Math.round((Date.parse(d) - Date.parse(S.today)) / 86400000);
+  const text = days < 0 ? `${-days} Tag${days === -1 ? '' : 'e'} drüber` : days === 0 ? 'Deadline heute' : days === 1 ? 'Deadline morgen' : days < 7 ? `Deadline ${relDate(d, S.today)}` : `Deadline ${+d.slice(8, 10)}.${+d.slice(5, 7)}.`;
+  return { days, text, cls: days < 0 ? 'overdue' : days <= 2 ? 'soon' : '' };
+}
+
 function taskRow(t, { showProject = true, showDate = true, sub = false, showParent = true } = {}) {
   const meta = [];
   if (showDate && t.due_date) meta.push(`<span class="${dueClass(t)}">${icon('cal')}${relDate(t.due_date, S.today)}${t.due_time ? ' ' + t.due_time : ''}</span>`);
   else if (t.due_time) meta.push(`<span class="${dueClass(t)}">${icon('clock')}${t.due_time}</span>`);
+  if (t.deadline) { const di = deadlineInfo(t.deadline); meta.push(`<span class="deadline ${di.cls}" title="Deadline ${esc(t.deadline)}">${icon('target')}${di.text}</span>`); }
   if (t.duration_min) meta.push(`<span>${icon('timer')}${fmtDuration(t.duration_min)}</span>`);
   if (t.recurrence) meta.push(`<span title="${esc(recurrenceLabel(t.recurrence))}">${icon('repeat')}</span>`);
   const subs = open().filter((s) => s.parent_id === t.id).length;
@@ -624,7 +632,7 @@ function viewWeek() {
         <div class="day-head"><div><div class="wd">${WD_SHORT[i + 1]}</div><div class="dn">${+d.slice(8, 10)}.</div></div><div class="load">${dayTasks.length ? dayTasks.length + (dayTasks.length === 1 ? ' Aufgabe' : ' Aufgaben') : ''}${load ? '<br>' + fmtShort(load) : ''}</div></div>
         <div class="day-body">
           ${dayEv.map((e) => `<div class="ev" style="--c:${esc(e.color)}" data-url="${esc(e.url || '')}"><b>${esc(e.title)}</b><small>${e.allDay ? 'ganztägig' : timeOf(e.start) + '–' + timeOf(e.end)}</small></div>`).join('')}
-          ${dayTasks.map((t) => `<div class="wtask prio-${t.priority}" data-task="${t.id}" draggable="true"><button class="check" data-check="${t.id}" aria-label="Erledigen"></button><div class="tt">${esc(t.title)}<small>${[t.due_date < d ? '<span style="color:var(--danger)">überfällig</span>' : '', t.due_time || '', t.duration_min ? fmtDuration(t.duration_min) : '', t.recurrence ? '↻' : ''].filter(Boolean).join(' · ')}</small></div></div>`).join('')}
+          ${dayTasks.map((t) => `<div class="wtask prio-${t.priority}" data-task="${t.id}" draggable="true"><button class="check" data-check="${t.id}" aria-label="Erledigen"></button><div class="tt">${esc(t.title)}<small>${[t.due_date < d ? '<span style="color:var(--danger)">überfällig</span>' : '', t.due_time || '', t.duration_min ? fmtDuration(t.duration_min) : '', t.recurrence ? '↻' : '', t.deadline ? `<span class="deadline ${deadlineInfo(t.deadline).cls}">🎯 ${+t.deadline.slice(8, 10)}.${+t.deadline.slice(5, 7)}.</span>` : ''].filter(Boolean).join(' · ')}</small></div></div>`).join('')}
           ${d >= S.today ? addInline({ due_date: d }, 'Hinzufügen') : ''}
         </div></div>`;
     }
@@ -1127,6 +1135,9 @@ function renderDrawer() {
 
     <label>${icon('clock')}Uhrzeit</label>
     <div class="row"><input type="time" data-f="due_time" value="${t.due_time || ''}" ${t.due_date ? '' : 'disabled'}>${t.due_time ? `<button class="icon-btn sm" data-clear="due_time" aria-label="Uhrzeit entfernen">${icon('x')}</button>` : ''}</div>
+
+    <label>${icon('target')}Deadline</label>
+    <div class="row"><input type="date" data-f="deadline" value="${t.deadline || ''}">${t.deadline ? `<button class="icon-btn sm" data-clear="deadline" aria-label="Deadline entfernen">${icon('x')}</button><span class="deadline-hint ${deadlineInfo(t.deadline).cls}">${deadlineInfo(t.deadline).text}</span>` : ''}</div>
 
     <label>${icon('timer')}Dauer</label>
     <div class="row"><select data-f="duration_min"><option value="">–</option>${durOpts.map((m) => `<option value="${m}" ${t.duration_min === m ? 'selected' : ''}>${fmtDuration(m)}</option>`).join('')}<option value="custom">Andere …</option></select></div>

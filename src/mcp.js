@@ -15,6 +15,7 @@ const taskFields = {
   due_date: { type: ['string', 'null'], description: 'Fälligkeitsdatum YYYY-MM-DD (lokal, Europe/Berlin). null entfernt das Datum.' },
   due_time: { type: ['string', 'null'], description: 'Uhrzeit HH:MM (24h), optional' },
   duration_min: { type: ['integer', 'null'], description: 'Geplante Dauer in Minuten' },
+  deadline: { type: ['string', 'null'], description: 'Deadline YYYY-MM-DD: bis wann es spätestens fertig sein muss (unabhängig von due_date = wann es geplant ist). Am Deadline-Tag kommt morgens eine Push-Nachricht. null entfernt sie. NICHT in die Notizen schreiben.' },
   recurrence: {
     type: ['object', 'null'],
     description: 'Wiederholung. Beispiele: täglich {freq:"day"}, alle 2 Tage {freq:"day",interval:2}, Mo+Do {freq:"week",days:[1,4]}, werktags {freq:"week",days:[1,2,3,4,5]}, monatlich am 15. {freq:"month",day:15}, jährlich {freq:"year"}. Benötigt due_date (= erstes Vorkommen). null entfernt sie.',
@@ -29,8 +30,15 @@ const taskFields = {
   labels: { type: 'array', items: { type: 'string' }, description: 'Labels (ersetzt die bisherigen)' },
   reminders: {
     type: 'array',
-    description: 'Push-Erinnerungen (ersetzt bisherige). {before: Minuten vor Fälligkeit} (braucht due_time) oder {at:"YYYY-MM-DDTHH:MM"}. Leer = Standard (15 Min. vorher, wenn Uhrzeit gesetzt). Prio-1-Aufgaben ohne Wiederholung bekommen zusätzlich eine Mail.',
-    items: { type: 'object', properties: { before: { type: 'integer' }, at: { type: 'string' } } },
+    description: 'Push-Erinnerungen (ersetzt bisherige; [] = Standard). Pro Eintrag ENTWEDER {"before": Minuten} = X Min. vor due_date+due_time (braucht due_time) ODER {"at": "YYYY-MM-DDTHH:MM"} = fester Zeitpunkt (lokale Zeit Europe/Berlin, funktioniert auch ohne due_date) ODER {"time": "HH:MM"} = am Fälligkeitstag um diese Uhrzeit. Ohne eigene Erinnerungen gilt automatisch: Aufgaben mit Uhrzeit → Push 15 Min. vorher; Prio 1 ohne Uhrzeit → Push+Mail morgens am Fälligkeitstag. Prio-1-Aufgaben ohne Wiederholung bekommen zusätzlich eine Mail.',
+    items: {
+      type: 'object',
+      properties: {
+        before: { type: 'integer', minimum: 0, maximum: 10080, description: 'Minuten vor der Fälligkeit' },
+        at: { type: 'string', description: 'YYYY-MM-DDTHH:MM (lokal)' },
+        time: { type: 'string', description: 'HH:MM am Fälligkeitstag' },
+      },
+    },
   },
   place: { type: ['string', 'null'], description: 'Name eines gespeicherten Orts für standortbasierte Erinnerung (siehe list_places). null entfernt ihn.' },
   place_event: { type: 'string', enum: ['arrive', 'leave'], description: 'Erinnern beim Ankommen (Standard) oder Verlassen' },
@@ -222,6 +230,7 @@ function view(c, t, all) {
   if (t.due_date) out.due_date = t.due_date;
   if (t.due_time) out.due_time = t.due_time;
   if (t.duration_min) out.duration_min = t.duration_min;
+  if (t.deadline) out.deadline = t.deadline;
   if (t.recurrence) out.recurrence = t.recurrence;
   if (t.labels.length) out.labels = t.labels;
   if (t.notes) out.notes = t.notes.length > 300 ? t.notes.slice(0, 300) + '…' : t.notes;
@@ -271,6 +280,8 @@ async function callTool(env, name, a = {}) {
         weekday: new Intl.DateTimeFormat('de-DE', { weekday: 'long', timeZone: env.TIMEZONE }).format(new Date()),
         counts: { overdue: overdue.length, today: today.length, this_week_incl_overdue: week.length, open_total: all.length },
         planned_minutes_today: today.reduce((n, t) => n + (t.duration_min || 0), 0),
+        deadlines_next_7_days: sortTasks(all.filter((t) => t.deadline && t.deadline <= addDays(c.today, 7)))
+          .sort((x, y) => x.deadline.localeCompare(y.deadline)).map((t) => view(c, t, all)),
         overdue: sortTasks(overdue).map((t) => view(c, t, all)),
         due_today: sortTasks(today).map((t) => view(c, t, all)),
         calendar_today: await calendar(env, c.today, c.today),
@@ -410,7 +421,7 @@ async function handleRpc(env, msg) {
         protocolVersion: PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'todo', title: 'NTD’s – Nic’s To-Do’s', version: '1.0.0' },
-        instructions: 'Persönliche To-Do-App des Nutzers (Zeitzone Europe/Berlin). Starte bei Fragen zum Tag mit get_overview. Prioritäten: 1 = dringend/rot … 4 = keine. Daten immer als YYYY-MM-DD, Uhrzeiten HH:MM.',
+        instructions: 'Persönliche To-Do-App des Nutzers (Zeitzone Europe/Berlin). Starte bei Fragen zum Tag mit get_overview. Prioritäten: 1 = dringend/rot … 4 = keine. Daten immer als YYYY-MM-DD, Uhrzeiten HH:MM. due_date = wann geplant; deadline = bis wann spätestens fertig (eigenes Feld, nicht in Notizen schreiben). Erinnerungen über das Feld reminders setzen; Antworten enthalten das gespeicherte Ergebnis – bei Fehlern kommt eine Meldung in failures.',
       });
     }
     case 'ping':

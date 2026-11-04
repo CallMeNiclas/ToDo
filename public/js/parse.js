@@ -143,6 +143,25 @@ export function parseQuickAdd(text, ctx) {
   }) ||
   take(/\sjeden\s+(\d{1,2})\.(?=\s)/i, (m) => recur({ freq: 'month', day: +m[1] }, `monatlich am ${m[1]}.`, nextMonthDay(today, +m[1])));
 
+  // deadline: "bis Freitag", "bis 15.12.", "deadline morgen", "Deadline 3. Dezember"
+  {
+    const dm = s.match(/\s(?:bis(?:\s+spätestens)?|spätestens|deadline)\s+(?=\S)/i);
+    if (dm) {
+      const rest = ' ' + s.slice(dm.index + dm[0].length);
+      const sub = parseQuickAdd(rest.split(/\s+(?=(?:p[1-4]|#|@)\b)/)[0], { today });
+      // only accept when the date expression starts right after the keyword
+      if (sub.due_date && !sub.due_time && sub.title.length < rest.trim().length) {
+        const consumed = rest.trim().slice(0, rest.trim().length - (rest.trim().endsWith(sub.title) ? sub.title.length : 0)).trim();
+        const startsWithDate = sub.title === '' || !rest.trim().startsWith(sub.title.split(' ')[0]);
+        if (startsWithDate && consumed) {
+          out.deadline = sub.due_date;
+          out.tokens.push({ type: 'deadline', label: '🎯 ' + relDate(sub.due_date, today) });
+          s = s.slice(0, dm.index) + ' ' + s.slice(dm.index + dm[0].length).replace(consumed, ' ');
+        }
+      }
+    }
+  }
+
   // date
   let date = null;
   take(/\s(?:heute|hute)(?=\s)/i, () => { date = today; }) ||
