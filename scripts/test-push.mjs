@@ -1,0 +1,11 @@
+import ece from 'http_ece';
+import crypto from 'node:crypto';
+import { encryptPayload, b64url, generateVapidKeys } from '../src/push.js';
+const ua = crypto.createECDH('prime256v1'); ua.generateKeys();
+const auth = crypto.randomBytes(16);
+const sub = { p256dh: b64url(ua.getPublicKey()), auth: b64url(auth) };
+const msg = JSON.stringify({ title: 'Test äöü', body: 'Hallo' });
+const body = await encryptPayload(sub, msg);
+const out = ece.decrypt(Buffer.from(body), { version: 'aes128gcm', privateKey: ua, authSecret: auth });
+console.log(out.toString() === msg ? 'PUSH ENCRYPTION OK' : 'MISMATCH ' + out.toString());
+const v = await generateVapidKeys(); console.log('vapid pub len', Buffer.from(v.publicKey,'base64url').length);

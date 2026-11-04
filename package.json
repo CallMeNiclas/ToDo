@@ -1,0 +1,24 @@
+{
+  "name": "todo",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy && wrangler d1 migrations apply todo-db --remote",
+    "db:migrate": "wrangler d1 migrations apply todo-db --remote",
+    "db:migrate:local": "wrangler d1 migrations apply todo-db --local",
+    "test:push": "node scripts/test-push.mjs",
+    "test:parse": "node scripts/test-parse.mjs"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "http_ece": "^1.2.0",
+    "wrangler": "^4.157.0"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^1.2.4"
+  },
+  "type": "module",
+  "private": true
+}
