@@ -9,7 +9,7 @@ const PROTOCOL_VERSIONS = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26
 const taskFields = {
   title: { type: 'string', description: 'Titel der Aufgabe' },
   notes: { type: 'string', description: 'Beschreibung / Notizen (Markdown erlaubt)' },
-  project: { type: 'string', description: 'Projekt-ID oder Projektname (Standard: Eingang)' },
+  project: { type: 'string', description: 'Projekt-ID, Name oder Pfad für Unterprojekte, z. B. "Fundus7/To-Do\'s" (Standard: Eingang)' },
   parent_id: { type: ['string', 'null'], description: 'ID der übergeordneten Aufgabe → wird Unteraufgabe' },
   priority: { type: 'integer', minimum: 1, maximum: 4, description: '1 = höchste (rot), 4 = keine' },
   due_date: { type: ['string', 'null'], description: 'Fälligkeitsdatum YYYY-MM-DD (lokal, Europe/Berlin). null entfernt das Datum.' },
@@ -50,7 +50,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         view: { type: 'string', enum: ['today', 'overdue', 'week', 'upcoming', 'no_date', 'all'], description: 'today = heute + überfällig; week = bis Sonntag; upcoming = ab morgen' },
-        project: { type: 'string', description: 'Projekt-ID oder -Name' },
+        project: { type: 'string', description: 'Projekt-ID, Name oder Pfad. Hauptprojekte schließen ihre Unterprojekte ein.' },
         label: { type: 'string' },
         priority: { type: 'integer', minimum: 1, maximum: 4 },
         search: { type: 'string', description: 'Volltext in Titel und Notizen' },
@@ -126,7 +126,7 @@ const TOOLS = [
   },
   {
     name: 'manage_project',
-    description: 'Projekt anlegen (ohne id), umbenennen/umfärben (mit id) oder löschen (action=delete, löscht auch alle Aufgaben darin).',
+    description: 'Projekt anlegen, umbenennen/umfärben/verschieben (mit id) oder löschen (action=delete, löscht auch Unterprojekte und alle Aufgaben darin). Unterprojekte: parent = übergeordnetes Projekt (ID, Name oder Pfad).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -134,6 +134,7 @@ const TOOLS = [
         id: { type: 'string' },
         name: { type: 'string' },
         color: { type: 'string', description: 'Hex, z. B. #10b981' },
+        parent: { type: ['string', 'null'], description: 'Übergeordnetes Projekt (ID, Name oder Pfad "Fundus7"). null = Hauptprojekt.' },
       },
       required: ['action'],
     },
@@ -166,12 +167,32 @@ async function ctx(env) {
   return { projects, places, today: localNow(env.TIMEZONE).date };
 }
 
+/** "Fundus7 / To-Do's" for sub-projects */
+function projectPath(c, id) {
+  const parts = [];
+  let p = c.projects.find((x) => x.id === id);
+  for (let i = 0; p && i < 10; i++) {
+    parts.unshift(p.name);
+    p = p.parent_id ? c.projects.find((x) => x.id === p.parent_id) : null;
+  }
+  return parts.join(' / ') || id;
+}
+
+/** Accepts an id, a unique name, or a path like "Fundus7/To-Do's". */
 function resolveProject(c, ref) {
   if (ref === undefined) return undefined;
   if (!ref) return 'inbox';
-  const p = c.projects.find((x) => x.id === ref) || c.projects.find((x) => x.name.toLowerCase() === String(ref).toLowerCase());
-  if (!p) throw new T.InputError(`Projekt "${ref}" nicht gefunden. Vorhanden: ${c.projects.map((x) => x.name).join(', ')}`);
-  return p.id;
+  const r = String(ref).trim();
+  const byId = c.projects.find((x) => x.id === r);
+  if (byId) return byId.id;
+  const normPath = (x) => x.toLowerCase().split('/').map((y) => y.trim()).join('/');
+  const byPath = c.projects.filter((x) => normPath(projectPath(c, x.id)) === normPath(r));
+  if (byPath.length === 1) return byPath[0].id;
+  const byName = c.projects.filter((x) => x.name.toLowerCase() === r.toLowerCase());
+  if (byName.length === 1) return byName[0].id;
+  const all = c.projects.map((x) => projectPath(c, x.id)).join(', ');
+  if (byName.length > 1) throw new T.InputError(`Projektname "${ref}" ist mehrdeutig. Bitte Pfad angeben, z. B. ${byName.map((x) => '"' + projectPath(c, x.id) + '"').join(' oder ')}`);
+  throw new T.InputError(`Projekt "${ref}" nicht gefunden. Vorhanden: ${all}`);
 }
 function resolvePlace(c, ref) {
   if (ref === undefined) return undefined;
@@ -193,7 +214,7 @@ function view(c, t, all) {
   const out = {
     id: t.id,
     title: t.title,
-    project: c.projects.find((p) => p.id === t.project_id)?.name || t.project_id,
+    project: projectPath(c, t.project_id),
     priority: t.priority,
   };
   if (t.parent_id) out.parent_id = t.parent_id;
@@ -263,7 +284,11 @@ async function callTool(env, name, a = {}) {
       if (a.view === 'week') list = list.filter((t) => t.due_date && t.due_date <= eow);
       if (a.view === 'upcoming') list = list.filter((t) => t.due_date && t.due_date > c.today);
       if (a.view === 'no_date') list = list.filter((t) => !t.due_date);
-      if (a.project) { const pid = resolveProject(c, a.project); list = list.filter((t) => t.project_id === pid); }
+      if (a.project) {
+        const ids = new Set([resolveProject(c, a.project)]);
+        for (let grew = true; grew;) { grew = false; for (const p of c.projects) if (p.parent_id && ids.has(p.parent_id) && !ids.has(p.id)) { ids.add(p.id); grew = true; } }
+        list = list.filter((t) => ids.has(t.project_id));
+      }
       if (a.label) list = list.filter((t) => t.labels.some((l) => l.toLowerCase() === a.label.replace(/^@/, '').toLowerCase()));
       if (a.priority) list = list.filter((t) => t.priority === a.priority);
       if (a.from_date) list = list.filter((t) => t.due_date && t.due_date >= a.from_date);
@@ -341,12 +366,18 @@ async function callTool(env, name, a = {}) {
     }
     case 'list_projects': {
       const { results } = await env.DB.prepare('SELECT project_id, COUNT(*) AS n FROM tasks WHERE completed_at IS NULL GROUP BY project_id').all();
-      return { projects: c.projects.map((p) => ({ id: p.id, name: p.name, color: p.color, open_tasks: results.find((r) => r.project_id === p.id)?.n || 0 })) };
+      return {
+        projects: c.projects.map((p) => ({
+          id: p.id, name: p.name, path: projectPath(c, p.id), parent_id: p.parent_id || null, color: p.color,
+          open_tasks: results.find((r) => r.project_id === p.id)?.n || 0,
+        })),
+      };
     }
     case 'manage_project': {
-      if (a.action === 'create') return T.createProject(env, a);
+      const parent = a.parent === undefined ? undefined : a.parent ? resolveProject(c, a.parent) : null;
+      if (a.action === 'create') return T.createProject(env, { name: a.name, color: a.color, parent_id: parent });
       const id = resolveProject(c, a.id || a.name);
-      if (a.action === 'update') return T.updateProject(env, id, { name: a.id ? a.name : undefined, color: a.color });
+      if (a.action === 'update') return T.updateProject(env, id, { name: a.id ? a.name : undefined, color: a.color, parent_id: parent });
       if (a.action === 'delete') return T.deleteProject(env, id);
       throw new T.InputError('Unbekannte action');
     }

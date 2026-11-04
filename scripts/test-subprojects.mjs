@@ -1,0 +1,35 @@
+const B = 'http://localhost:8787';
+let cookies = {};
+const jar = (res) => { for (const c of res.headers.getSetCookie()) { const [kv] = c.split(';'); const [k, ...v] = kv.split('='); cookies[k] = v.join('='); } };
+const ck = () => Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
+const f = async (path, opts = {}) => { const r = await fetch(B + path, { redirect: 'manual', ...opts, headers: { Cookie: ck(), ...(opts.headers || {}) } }); jar(r); return r; };
+const j = async (path, method = 'GET', body) => { const r = await f('/api' + path, { method, headers: { 'Content-Type': 'application/json', Origin: B }, body: body ? JSON.stringify(body) : undefined }); const d = await r.json(); if (!r.ok) throw new Error(path + ' ' + r.status + ' ' + JSON.stringify(d)); return d; };
+await f('/auth/dev');
+const f7 = await j('/projects', 'POST', { name: 'Fundus7', color: '#2563eb' });
+const todo = await j('/projects', 'POST', { name: "To-Do's", parent_id: f7.id });
+const rec = await j('/projects', 'POST', { name: "Wiederkehrende To-Do's", parent_id: f7.id });
+const priv = await j('/projects', 'POST', { name: 'Privat' });
+const ptodo = await j('/projects', 'POST', { name: "To-Do's", parent_id: priv.id });
+console.log('child color inherits:', todo.color === '#2563eb');
+try { await j('/projects/' + f7.id, 'PATCH', { parent_id: todo.id }); } catch (e) { console.log('cycle blocked:', e.message.includes('Zirkul')); }
+await j('/tasks', 'POST', { title: 'Inventur vorbereiten', project_id: todo.id, due_date: '2026-11-05', priority: 1 });
+await j('/tasks', 'POST', { title: 'Wochenbericht', project_id: rec.id, due_date: '2026-11-06', recurrence: { freq: 'week', days: [5] } });
+await j('/tasks', 'POST', { title: 'Allgemeines Fundus7', project_id: f7.id });
+await j('/tasks', 'POST', { title: 'Wäsche', project_id: ptodo.id });
+// MCP via OAuth
+const reg = await (await fetch(B + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: 'Test', redirect_uris: ['https://claude.ai/api/mcp/auth_callback'], token_endpoint_auth_method: 'none' }) })).json();
+const verifier = 'v'.repeat(50);
+const challenge = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))).toString('base64url');
+const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', code_challenge: challenge, code_challenge_method: 'S256', state: 'x', scope: 'tasks', resource: B + '/mcp' });
+let r = await f('/authorize?' + q); const handle = (await r.text()).match(/name="handle" value="([^"]+)"/)[1];
+r = await f('/authorize?' + q, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: B }, body: new URLSearchParams({ handle, decision: 'approve' }) });
+const code = new URL(r.headers.get('location')).searchParams.get('code');
+const tok = await (await fetch(B + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', client_id: reg.client_id, code_verifier: verifier, resource: B + '/mcp' }) })).json();
+const call = async (name, args) => (await (await fetch(B + '/mcp', { method: 'POST', headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })).json()).result;
+let res = await call('add_tasks', { tasks: [{ title: 'Ambig', project: "To-Do's" }, { title: 'Pfad ok', project: "Fundus7/To-Do's" }] });
+console.log('ambiguous:', res.structuredContent.failures[0]?.error.slice(0, 60), '| path:', res.structuredContent.created[0]?.project);
+res = await call('find_tasks', { project: 'Fundus7' });
+console.log('Fundus7 subtree:', res.structuredContent.tasks.map((t) => t.title + ' [' + t.project + ']'));
+res = await call('manage_project', { action: 'create', name: 'Lager', parent: 'Fundus7' });
+console.log('mcp subproject parent ok:', res.structuredContent.parent_id === f7.id);
+console.log('F7', f7.id);

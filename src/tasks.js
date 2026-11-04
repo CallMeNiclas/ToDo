@@ -297,30 +297,57 @@ export async function listProjects(env) {
   const { results } = await env.DB.prepare('SELECT * FROM projects WHERE archived = 0 ORDER BY sort, created_at').all();
   return results;
 }
-export async function createProject(env, { name, color }) {
+async function checkParent(env, id, parentId) {
+  if (!parentId) return null;
+  if (parentId === 'inbox') throw new InputError('Der Eingang kann keine Unterprojekte haben');
+  if (parentId === id) throw new InputError('Projekt kann nicht sein eigenes Unterprojekt sein');
+  let cur = await env.DB.prepare('SELECT id, parent_id FROM projects WHERE id = ?').bind(parentId).first();
+  if (!cur) throw new InputError('Übergeordnetes Projekt nicht gefunden');
+  for (let i = 0; cur && i < 20; i++) {
+    if (id && cur.parent_id === id) throw new InputError('Zirkuläre Projektstruktur');
+    cur = cur.parent_id ? await env.DB.prepare('SELECT id, parent_id FROM projects WHERE id = ?').bind(cur.parent_id).first() : null;
+  }
+  return parentId;
+}
+
+export async function createProject(env, { name, color, parent_id }) {
   name = String(name || '').trim();
   if (!name) throw new InputError('Projektname fehlt');
   const id = uid();
+  const parent = await checkParent(env, id, parent_id || null);
   const max = await env.DB.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM projects').first();
-  await env.DB.prepare('INSERT INTO projects (id, name, color, sort) VALUES (?, ?, ?, ?)')
-    .bind(id, name.slice(0, 100), /^#[0-9a-f]{6}$/i.test(color || '') ? color : pickColor(max.s), max.s).run();
+  let col = /^#[0-9a-f]{6}$/i.test(color || '') ? color : null;
+  if (!col && parent) col = (await env.DB.prepare('SELECT color FROM projects WHERE id = ?').bind(parent).first()).color;
+  await env.DB.prepare('INSERT INTO projects (id, name, color, sort, parent_id) VALUES (?, ?, ?, ?, ?)')
+    .bind(id, name.slice(0, 100), col || pickColor(max.s), max.s, parent).run();
   return env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
 }
-export async function updateProject(env, id, { name, color, sort }) {
+export async function updateProject(env, id, { name, color, sort, parent_id }) {
   const p = await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
   if (!p) throw new InputError('Projekt nicht gefunden');
+  if (id === 'inbox' && parent_id) throw new InputError('Der Eingang kann kein Unterprojekt sein');
   const n = name !== undefined ? String(name).trim().slice(0, 100) || p.name : p.name;
   const c = color && /^#[0-9a-f]{6}$/i.test(color) ? color : p.color;
   const s = sort !== undefined ? parseInt(sort, 10) || 0 : p.sort;
-  await env.DB.prepare('UPDATE projects SET name = ?, color = ?, sort = ? WHERE id = ?').bind(n, c, s, id).run();
+  const parent = parent_id !== undefined ? await checkParent(env, id, parent_id || null) : p.parent_id;
+  await env.DB.prepare('UPDATE projects SET name = ?, color = ?, sort = ?, parent_id = ? WHERE id = ?').bind(n, c, s, parent, id).run();
   return env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
 }
+/** Deletes a project including its sub-projects and all their tasks. */
 export async function deleteProject(env, id) {
   if (id === 'inbox') throw new InputError('Der Eingang kann nicht gelöscht werden');
   const p = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(id).first();
   if (!p) throw new InputError('Projekt nicht gefunden');
-  await env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(id).run();
-  return { deleted: id };
+  const ids = [id];
+  for (let i = 0; i < ids.length; i++) {
+    const { results } = await env.DB.prepare('SELECT id FROM projects WHERE parent_id = ?').bind(ids[i]).all();
+    ids.push(...results.map((r) => r.id));
+  }
+  for (const pid of ids.reverse()) {
+    await env.DB.prepare('DELETE FROM tasks WHERE project_id = ?').bind(pid).run();
+    await env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(pid).run();
+  }
+  return { deleted: id, sub_projects_deleted: ids.length - 1 };
 }
 const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6', '#84cc16', '#f97316'];
 const pickColor = (i) => PALETTE[i % PALETTE.length];
