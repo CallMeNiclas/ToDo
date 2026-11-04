@@ -645,7 +645,7 @@ function viewToday() {
     list += `<div class="section">${addInline({ due_date: t })}</div>`;
   }
 
-  $('#content').innerHTML = `${statsHtml()}
+  $('#content').innerHTML = `
   <div class="grid-today">
     <div class="panel">${list}</div>
     <div class="panel"><div class="panel-head"><h2>${icon('clock')}Tagesplan</h2><span class="meta" id="cal-meta"></span></div><div id="timeline"></div></div>
@@ -818,7 +818,7 @@ function viewUpcoming() {
   const sorted = [...dates].sort();
   const draw = (data) => {
     const evs = data?.events || [];
-    let html = statsHtml();
+    let html = '';
     for (const d of sorted) {
       const ts = future.filter((t) => t.due_date === d);
       const ev = eventsOn(evs, d);
