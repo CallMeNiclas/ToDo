@@ -52,8 +52,43 @@ export function parseQuickAdd(text, ctx) {
     return true;
   };
 
-  // priority
-  take(/\s(?:p|!)([1-4])(?=\s)/i, (m) => { out.priority = +m[1]; out.tokens.push({ type: 'priority', label: 'P' + m[1] }); });
+  // dictation leaves punctuation behind
+  s = s.replace(/[.,!?](?=\s)/g, (c, i) => (/\d/.test(s[i - 1]) ? c : ' '));
+
+  // priority: "p1", "!1", spoken "Priorität eins" / "Prio 1"
+  take(/\s(?:p|!)([1-4])(?=\s)/i, (m) => { out.priority = +m[1]; out.tokens.push({ type: 'priority', label: 'P' + m[1] }); }) ||
+  take(/\s(?:mit\s+)?(?:priorität|prio)\s+(eins|zwei|drei|vier|[1-4])(?=\s)/i, (m) => {
+    const n = { eins: 1, zwei: 2, drei: 3, vier: 4 }[m[1].toLowerCase()] || +m[1];
+    out.priority = n; out.tokens.push({ type: 'priority', label: 'P' + n });
+  }) ||
+  take(/\s(?:ist\s+)?(?:sehr\s+)?(?:wichtig|dringend)(?=\s)/i, () => { out.priority = 1; out.tokens.push({ type: 'priority', label: 'P1' }); });
+
+  // spoken project: "Projekt Arbeit", "im Projekt Haus und Garten"
+  if (ctx.projects?.length) {
+    const m = s.match(/\s(?:(?:im|in|ins|zum)\s+)?projekt\s+/i);
+    if (m) {
+      const rest = s.slice(m.index + m[0].length).toLowerCase();
+      const hit = [...ctx.projects].sort((a, b) => b.name.length - a.name.length)
+        .find((p) => rest.startsWith(p.name.toLowerCase()) && /^\s/.test(rest.slice(p.name.length) || ' '));
+      if (hit) {
+        out.project_id = hit.id;
+        out.tokens.push({ type: 'project', label: '#' + hit.name });
+        s = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length + hit.name.length);
+      }
+    }
+  }
+
+  // spoken label: "Label Telefon"
+  const spokenLabels = [];
+  while (take(/\s(?:mit\s+)?label\s+([\p{L}\p{N}_-]+)(?=\s)/iu, (m) => { spokenLabels.push(m[1].toLowerCase()); })) { /* loop */ }
+
+  // spoken durations
+  const NUM = { eine: 1, einer: 1, ein: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, zehn: 10, fünfzehn: 15, zwanzig: 20, dreißig: 30, fünfundvierzig: 45 };
+  take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(?:eine\s+)?halbe\s+stunde(?=\s)/i, () => { out.duration_min = 30; }) ||
+  take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(?:anderthalb|eineinhalb)\s+stunden?(?=\s)/i, () => { out.duration_min = 90; }) ||
+  take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(eine|einer|ein|zwei|drei|vier|fünf|sechs|\d+)\s+stunden?(?=\s)/i, (m) => { out.duration_min = (NUM[m[1].toLowerCase()] || +m[1]) * 60; }) ||
+  take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(zehn|fünfzehn|zwanzig|dreißig|fünfundvierzig|\d+)\s+minuten(?=\s)/i, (m) => { out.duration_min = NUM[m[1].toLowerCase()] || +m[1]; });
+  if (out.duration_min) out.tokens.push({ type: 'duration', label: fmtDuration(out.duration_min) });
 
   // project: "#Name" – match the longest existing project name
   if (ctx.projects?.length) {
@@ -73,10 +108,11 @@ export function parseQuickAdd(text, ctx) {
   // labels
   const labels = [];
   while (take(/\s@([\p{L}\p{N}_-]+)(?=\s)/u, (m) => { labels.push(m[1]); })) { /* loop */ }
+  labels.push(...spokenLabels);
   if (labels.length) { out.labels = labels; labels.forEach((l) => out.tokens.push({ type: 'label', label: '@' + l })); }
 
   // duration
-  take(/\s(?:für\s+)?(\d+(?:[.,]\d+)?)\s?(min|minuten|m|h|std|stunden?)(?=\s)/i, (m) => {
+  if (!out.duration_min) take(/\s(?:für\s+)?(\d+(?:[.,]\d+)?)\s?(min|minuten|m|h|std|stunden?)(?=\s)/i, (m) => {
     const n = parseFloat(m[1].replace(',', '.'));
     const mins = /^(h|std|stunde|stunden)$/i.test(m[2]) ? Math.round(n * 60) : Math.round(n);
     if (!(mins > 0)) return false;

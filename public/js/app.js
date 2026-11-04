@@ -43,6 +43,8 @@ const P = {
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>',
 };
 const icon = (name, extra = '') => `<svg viewBox="0 0 24 24" ${extra}>${P[name].replace('{d}', S.today ? +S.today.slice(8, 10) : '')}</svg>`;
 
@@ -301,7 +303,7 @@ function parseRoute() {
   if (['today', 'week', 'upcoming', 'inbox', 'completed', 'settings'].includes(name)) return { name, arg };
   if (name === 'project' && arg) return { name, arg };
   if (name === 'label' && arg) return { name, arg };
-  if (name === 'search') return { name, arg };
+  if (name === 'search') return { name, arg: arg || '' };
   return { name: 'today' };
 }
 
@@ -672,12 +674,67 @@ function viewLabel(name) {
   $('#content').innerHTML = `<div class="panel"><div class="section">${list.length ? sortTasks(list).map((t) => taskRow(t)).join('') : emptyHtml('🏷️', 'Keine Aufgaben mit diesem Label.')}${addInline({ labels: [name] })}</div></div>`;
 }
 
+const norm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ß/g, 'ss');
+function matches(t, words) {
+  const hay = norm([t.title, t.notes, t.labels.join(' '), project(t.project_id)?.name].join(' '));
+  return words.every((w) => hay.includes(w));
+}
+function highlight(text, words) {
+  let html = esc(text);
+  for (const w of words) {
+    if (w.length < 2) continue;
+    const n = norm(text);
+    const i = n.indexOf(w);
+    if (i < 0) continue;
+    // positions match because normalize only strips combining marks
+    const plain = text.slice(i, i + w.length);
+    html = html.replace(esc(plain), `<mark>${esc(plain)}</mark>`);
+  }
+  return html;
+}
+let completedCache = { at: 0, tasks: [] };
+
 function viewSearch(q) {
   q = (q || '').trim();
-  setTitle('Suche', q ? `„${q}“` : '');
-  const ql = q.toLowerCase();
-  const list = q ? open().filter((t) => t.title.toLowerCase().includes(ql) || t.notes.toLowerCase().includes(ql) || t.labels.some((l) => l.toLowerCase().includes(ql))) : [];
-  $('#content').innerHTML = `<div class="panel"><div class="section">${list.length ? sortTasks(list).map((t) => taskRow(t)).join('') : emptyHtml('🔍', q ? 'Nichts gefunden.' : 'Suchbegriff eingeben.')}</div></div>`;
+  setTitle('Suche');
+  $('#content').innerHTML = `<label class="search-big">${icon('search')}<input id="search-big" type="search" placeholder="Aufgabe suchen …" autocomplete="off" enterkeyhint="search" value="${esc(q)}"></label><div id="search-results"></div>`;
+  const inp = $('#search-big');
+  let t;
+  inp.addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      const v = inp.value.trim();
+      history.replaceState(null, '', '#/search' + (v ? '/' + encodeURIComponent(v) : ''));
+      S.route = { name: 'search', arg: v };
+      $('#search').value = v;
+      renderSearchResults(v);
+    }, 120);
+  });
+  renderSearchResults(q);
+  if (!q || window.innerWidth > 860) setTimeout(() => { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 30);
+}
+
+async function renderSearchResults(q) {
+  const box = $('#search-results');
+  if (!box) return;
+  const words = norm(q).split(/\s+/).filter(Boolean);
+  if (!words.length) { box.innerHTML = `<div class="panel">${emptyHtml('🔍', 'Nach Titel, Notizen, Labels oder Projekt suchen.')}</div>`; return; }
+  const openHits = sortTasks(open().filter((x) => matches(x, words)));
+  const row = (x) => taskRow(x).replace(`<div class="t-title">${esc(x.title)}</div>`, `<div class="t-title">${highlight(x.title, words)}</div>`);
+  const draw = (done) => {
+    if (!box.isConnected) return;
+    const doneHits = done ? done.filter((x) => matches(x, words)).slice(0, 30) : null;
+    box.innerHTML = `<div class="panel"><div class="section"><div class="section-title"><span>Offen<span class="n">${openHits.length}</span></span></div>${openHits.length ? openHits.map(row).join('') : '<div class="empty" style="padding:14px 16px">Keine offenen Treffer.</div>'}</div>
+      ${doneHits === null ? '' : `<div class="section"><div class="section-title"><span>Erledigt<span class="n">${doneHits.length}</span></span></div>${doneHits.map((x) => row(x)).join('') || '<div class="empty" style="padding:14px 16px">Keine erledigten Treffer.</div>'}</div>`}</div>`;
+  };
+  draw(Date.now() - completedCache.at < 60000 ? completedCache.tasks : null);
+  if (Date.now() - completedCache.at >= 60000 && net.online) {
+    try {
+      const r = await api('/tasks/completed?limit=200');
+      completedCache = { at: Date.now(), tasks: r.tasks };
+      if (S.route.name === 'search' && S.route.arg === q) draw(r.tasks);
+    } catch { /* offline */ }
+  }
 }
 
 async function viewCompleted() {
@@ -1140,7 +1197,35 @@ function openQuickAdd(defaults = {}) {
   renderQaTokens();
   setTimeout(() => $('#qa-input').focus(), 20);
 }
+// ---------------------------------------------------------------- speech input
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+function toggleMic() {
+  if (rec) { rec.stop(); return; }
+  if (!SR) return toast('Spracheingabe wird von diesem Browser nicht unterstützt – nutze das 🎤 der Tastatur.');
+  const inp = $('#qa-input');
+  const base = inp.value.trim();
+  rec = new SR();
+  rec.lang = 'de-DE';
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+  $('#qa-mic').classList.add('on');
+  rec.onresult = (e) => {
+    const text = [...e.results].map((r) => r[0].transcript).join(' ').trim();
+    inp.value = (base ? base + ' ' : '') + text.replace(/[.!?]+$/, '');
+    renderQaTokens();
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Mikrofon nicht erlaubt – in den Einstellungen freigeben.');
+    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Spracheingabe: ' + e.error);
+  };
+  rec.onend = () => { rec = null; $('#qa-mic')?.classList.remove('on'); inp.focus(); };
+  try { rec.start(); } catch { rec = null; $('#qa-mic').classList.remove('on'); }
+}
+
 function closeQuickAdd() {
+  if (rec) rec.abort();
   $('#quick-add').classList.remove('open');
   $('#quick-add').setAttribute('aria-hidden', 'true');
 }
@@ -1234,6 +1319,8 @@ function bindGlobal() {
   $('#qa-form').addEventListener('submit', submitQuickAdd);
   $('#qa-input').addEventListener('input', renderQaTokens);
   $('#qa-cancel').addEventListener('click', closeQuickAdd);
+  if (!SR) $('#qa-mic').hidden = true;
+  $('#qa-mic').addEventListener('click', toggleMic);
   $('#quick-add').addEventListener('click', (e) => { if (e.target.id === 'quick-add') closeQuickAdd(); });
   $('#qa-notes').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitQuickAdd(e); });
   $('#quick-add-btn').addEventListener('click', () => openQuickAdd(defaultsForRoute()));
@@ -1246,8 +1333,12 @@ function bindGlobal() {
     clearTimeout(st);
     st = setTimeout(() => {
       const q = e.target.value.trim();
-      if (q) history.replaceState(null, '', '#/search/' + encodeURIComponent(q)), (S.route = { name: 'search', arg: q }), render();
-      else go('#/today');
+      if (S.route.name === 'search' && $('#search-big')) {
+        $('#search-big').value = q;
+        S.route.arg = q;
+        history.replaceState(null, '', '#/search' + (q ? '/' + encodeURIComponent(q) : ''));
+        renderSearchResults(q);
+      } else if (q) go('#/search/' + encodeURIComponent(q));
     }, 150);
   });
   $('#add-project').addEventListener('click', async () => {
@@ -1308,6 +1399,7 @@ function bindGlobal() {
       S.places = S.places.filter((p) => p.id !== dp.dataset.delPlace);
       return viewSettings();
     }
+    if (el.closest('#search-btn')) return go('#/search');
     if (el.closest('#sync')) { if (queue.length) return sync(); return refresh(); }
     const cp = el.closest('[data-copy]');
     if (cp) return copy(cp.dataset.copy);
@@ -1341,7 +1433,7 @@ function bindGlobal() {
     }
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'q' || e.key === 'n') { e.preventDefault(); openQuickAdd(defaultsForRoute()); }
-    if (e.key === '/') { e.preventDefault(); $('#search').focus(); }
+    if (e.key === '/') { e.preventDefault(); if (window.innerWidth > 860) $('#search').focus(); else go('#/search'); }
   });
 }
 

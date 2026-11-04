@@ -408,3 +408,19 @@ textarea { resize: vertical; }
   .sync-label { display: none; }
   .sync-short { display: inline; }
 }
+
+/* ---------- search ---------- */
+.search-big { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; margin: 4px 0 16px; box-shadow: var(--shadow); color: var(--muted); }
+.search-big:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search-big input { border: 0; background: transparent; box-shadow: none !important; padding: 13px 0; width: 100%; font-size: 17px; }
+.search-big svg { width: 20px; height: 20px; }
+mark { background: color-mix(in srgb, var(--p2) 30%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.search-btn { display: none; }
+
+/* ---------- speech ---------- */
+.qa-row { display: flex; align-items: center; gap: 6px; }
+.qa-mic { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg-2); display: grid; place-items: center; cursor: pointer; }
+.qa-mic svg { width: 19px; height: 19px; }
+.qa-mic.on { background: var(--danger); border-color: var(--danger); color: #fff; animation: micpulse 1.2s infinite; }
+@keyframes micpulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 50%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+@media (max-width: 860px) { .search-btn { display: inline-grid; } }
