@@ -32,6 +32,7 @@ export async function handleApi(request, env) {
         today, timezone: env.TIMEZONE, email: env.OWNER_EMAIL, projects, tasks, places, settings,
         doneToday, vapidPublicKey: vapid.publicKey, mode: await computeMode(env),
         logos: Object.fromEntries(await Promise.all(['work', 'private', 'holiday'].map(async (m) => [m, (await T.getSetting(env, 'logo_v_' + m)) || null]))),
+        logoStyles: Object.fromEntries(await Promise.all(['work', 'private', 'holiday'].map(async (m) => [m, (await T.getSetting(env, 'logo_style_' + m)) || 'logo']))),
         googleConnected: !!(await T.getSetting(env, 'google_refresh_token')),
       });
     }
@@ -81,14 +82,15 @@ export async function handleApi(request, env) {
       }
       if (method === 'POST') {
         const d = String(body.dataUrl || '');
-        if (!/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(d) || d.length > 700000) throw new T.InputError('Bild als PNG/JPG/WebP, max. ca. 500 KB');
+        if (!/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(d) || d.length > 1500000) throw new T.InputError('Bild als PNG/JPG/WebP, max. ca. 1 MB');
         await T.setSetting(env, key, d);
+        await T.setSetting(env, 'logo_style_' + r[1], body.style === 'photo' ? 'photo' : 'logo');
         const v = Date.now().toString(36);
         await T.setSetting(env, 'logo_v_' + r[1], v);
         return json({ ok: true, v });
       }
       if (method === 'DELETE') {
-        await env.DB.prepare('DELETE FROM settings WHERE key IN (?, ?)').bind(key, 'logo_v_' + r[1]).run();
+        await env.DB.prepare('DELETE FROM settings WHERE key IN (?, ?, ?)').bind(key, 'logo_v_' + r[1], 'logo_style_' + r[1]).run();
         return json({ ok: true });
       }
     }

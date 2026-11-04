@@ -99,7 +99,7 @@ function applyBootstrap(b) {
   Object.assign(S, {
     tasks: b.tasks, projects: b.projects, places: b.places, settings: b.settings, today: b.today,
     doneToday: b.doneToday, google: b.googleConnected, vapid: b.vapidPublicKey, email: b.email,
-    mode: b.mode || S.mode, logos: b.logos || S.logos || {},
+    mode: b.mode || S.mode, logos: b.logos || S.logos || {}, logoStyles: b.logoStyles || S.logoStyles || {},
   });
   renderMode();
   // tasks created offline that are not on the server yet
@@ -300,9 +300,10 @@ function renderMode() {
   }
   const wm = $('#watermark');
   if (wm) {
-    const v = S.logos?.[k] || (k === 'holiday' ? S.logos?.private : null);
-    const key = S.logos?.[k] ? k : 'private';
-    wm.style.backgroundImage = v && k !== 'all' ? `url(/api/logo/${key}?v=${v})` : 'none';
+    const key = S.logos?.[k] ? k : k === 'holiday' && S.logos?.private ? 'private' : null;
+    const v = key && k !== 'all' ? S.logos[key] : null;
+    wm.style.backgroundImage = v ? `url(/api/logo/${key}?v=${v})` : 'none';
+    document.body.dataset.bg = v ? (S.logoStyles?.[key] === 'photo' ? 'photo' : 'logo') : '';
   }
 }
 function openModeMenu() {
@@ -464,6 +465,7 @@ function render() {
   $('#top-actions').innerHTML = '';
   $('#view-sub').textContent = '';
   const views = { dashboard: viewDashboard, health: viewHealth, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
+  document.body.dataset.view = r.name;
   (views[r.name] || viewDashboard)();
   document.title = $('#view-title').textContent + ' · NTD’s';
   const c = counts();
@@ -1131,14 +1133,24 @@ const GCOLORS = [['#7986cb','Lavendel'],['#33b679','Salbei'],['#8e24aa','Weintra
 
 async function uploadLogo(mode, file) {
   const img = await createImageBitmap(file);
-  const max = 640, scale = Math.min(1, max / Math.max(img.width, img.height));
+  // photo or logo? logos usually have transparent pixels
+  const probe = document.createElement('canvas');
+  probe.width = 64; probe.height = 64;
+  const pc = probe.getContext('2d');
+  pc.drawImage(img, 0, 0, 64, 64);
+  const px = pc.getImageData(0, 0, 64, 64).data;
+  let transparent = 0;
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 250) transparent++;
+  const style = transparent > 40 ? 'logo' : 'photo';
+  const max = style === 'photo' ? 1600 : 640, scale = Math.min(1, max / Math.max(img.width, img.height));
   const c = document.createElement('canvas');
   c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  let dataUrl = c.toDataURL('image/webp', 0.85);
-  if (!dataUrl.startsWith('data:image/webp')) dataUrl = c.toDataURL('image/png');
-  const r = await api('/logo/' + mode, { method: 'POST', body: { dataUrl } });
+  let dataUrl = style === 'photo' ? c.toDataURL('image/webp', 0.78) : c.toDataURL('image/webp', 0.85);
+  if (!dataUrl.startsWith('data:image/webp')) dataUrl = style === 'photo' ? c.toDataURL('image/jpeg', 0.8) : c.toDataURL('image/png');
+  const r = await api('/logo/' + mode, { method: 'POST', body: { dataUrl, style } });
   S.logos = { ...S.logos, [mode]: r.v };
+  S.logoStyles = { ...S.logoStyles, [mode]: style };
   renderMode();
   viewSettings();
   toast('Logo gespeichert');
@@ -1220,7 +1232,8 @@ async function viewSettings() {
       <div class="row"><label>Arbeitszeit</label><input type="time" data-setting="work_start" value="${esc(s.work_start)}"> bis <input type="time" data-setting="work_end" value="${esc(s.work_end)}"></div>
       <div class="row"><label>Termine = Arbeit, wenn Farbe</label><div class="color-pick">${GCOLORS.map(([c, n]) => `<button type="button" class="${String(s.work_colors).toLowerCase().split(',').includes(c) ? 'on' : ''}" data-workcolor="${c}" title="${n}" style="--c:${c}"><span></span>${n}</button>`).join('')}</div></div>
       <div class="row"><label>… oder Stichwort in Titel/Ort</label><input data-setting="work_keywords" value="${esc(s.work_keywords)}" placeholder="z. B. Trippelsberg, Fundus, Messe" style="flex:1;min-width:200px"></div>
-      <h3 class="sub-h">Logos im Hintergrund</h3>
+      <h3 class="sub-h">Hintergrundbild (Übersicht &amp; Heute)</h3>
+      <p class="muted small">Fotos füllen den Hintergrund dezent aus, Logos mit transparentem Hintergrund erscheinen als Wasserzeichen. Ohne eigenes Urlaubsbild wird das Privat-Bild genutzt.</p>
       <div class="logo-row">${['work', 'private', 'holiday'].map((m) => `<div class="logo-slot"><div class="logo-prev" style="${S.logos?.[m] ? `background-image:url(/api/logo/${m}?v=${S.logos[m]})` : ''}">${S.logos?.[m] ? '' : MODE_UI[m].emoji}</div><div><b>${MODE_UI[m].label}</b></div><label class="btn sm">Bild wählen<input type="file" accept="image/*" data-logo="${m}" hidden></label>${S.logos?.[m] ? `<button class="btn sm ghost" data-del-logo="${m}">Entfernen</button>` : ''}</div>`).join('')}</div>
       <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:14px">iPhone-Fokus koppeln (Kurzbefehle)</summary>
         <ol>
