@@ -391,3 +391,20 @@ textarea { resize: vertical; }
   .settings .row > label { min-width: 100%; }
 }
 @media (hover: none) { .nav-item .nav-edit { opacity: 1; } }
+
+/* ---------- sync status ---------- */
+.sync { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.sync:hover { color: var(--fg); }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.sync.off { color: var(--p2); border-color: color-mix(in srgb, var(--p2) 40%, var(--line)); }
+.sync.off .sync-dot { background: var(--p2); }
+.sync.wait .sync-dot { background: var(--p3); }
+.sync.busy .sync-dot { background: var(--p3); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.t-meta .pending { color: var(--p2); }
+.sync-short { display: none; }
+@media (max-width: 860px) {
+  .sync { padding: 4px 9px; font-size: 11.5px; flex: none; }
+  .sync-label { display: none; }
+  .sync-short { display: inline; }
+}

@@ -204,11 +204,18 @@ export async function completionsSince(env, isoUtc) {
 // ---------- mutations ----------
 export async function createTask(env, input) {
   if (!input || !String(input.title || '').trim()) throw new InputError('Titel fehlt');
+  // client-chosen id makes offline sync idempotent: re-sending the same task returns the existing one
+  const clientId = typeof input.id === 'string' && /^[a-f0-9]{16}$/.test(input.id) ? input.id : null;
+  if (clientId) {
+    const existing = await getTask(env, clientId);
+    if (existing) return existing;
+  }
   const base = { priority: 4, ...input };
+  delete base.id;
   if (!base.project_id && !base.parent_id) base.project_id = 'inbox';
   if (!base.project_id) delete base.project_id;
   const c = await toColumns(env, base, null);
-  const id = uid();
+  const id = clientId || uid();
   const cols = { id, ...c };
   const keys = Object.keys(cols);
   await env.DB.prepare(`INSERT INTO tasks (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`)

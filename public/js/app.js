@@ -46,14 +46,36 @@ const P = {
 };
 const icon = (name, extra = '') => `<svg viewBox="0 0 24 24" ${extra}>${P[name].replace('{d}', S.today ? +S.today.slice(8, 10) : '')}</svg>`;
 
+// ---------------------------------------------------------------- offline storage
+const store = {
+  get(k, def) { try { const v = localStorage.getItem('todo.' + k); return v ? JSON.parse(v) : def; } catch { return def; } },
+  set(k, v) { try { localStorage.setItem('todo.' + k, JSON.stringify(v)); } catch { /* quota / private mode */ } },
+};
+class OfflineError extends Error {}
+const net = { online: true, lastSync: store.get('lastSync', null), syncing: false };
+let queue = store.get('queue', []);
+const saveQueue = () => store.set('queue', queue);
+const newId = () => [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+function setOnline(on) {
+  if (net.online !== on) { net.online = on; renderSync(); }
+}
+
 // ---------------------------------------------------------------- api
 async function api(path, { method = 'GET', body } = {}) {
-  const res = await fetch('/api' + path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-    credentials: 'same-origin',
-  });
+  let res;
+  try {
+    res = await fetch('/api' + path, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+  } catch {
+    setOnline(false);
+    throw new OfflineError('Keine Verbindung');
+  }
+  setOnline(true);
   if (res.status === 401) { showLogin(); throw new Error('Nicht angemeldet'); }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Fehler ' + res.status);
@@ -65,25 +87,54 @@ function showLogin() {
   $('#login').hidden = false;
 }
 
+function applyBootstrap(b) {
+  Object.assign(S, {
+    tasks: b.tasks, projects: b.projects, places: b.places, settings: b.settings, today: b.today,
+    doneToday: b.doneToday, google: b.googleConnected, vapid: b.vapidPublicKey, email: b.email,
+  });
+  // tasks created offline that are not on the server yet
+  for (const q of queue) if (q.op === 'create' && !S.tasks.some((t) => t.id === q.id)) S.tasks.push(q.task);
+  for (const q of queue) if (q.op === 'complete') S.tasks = S.tasks.filter((t) => t.id !== q.id && t.parent_id !== q.id);
+}
+
+function markSynced(b) {
+  net.lastSync = new Date().toISOString();
+  store.set('lastSync', net.lastSync);
+  store.set('bootstrap', b);
+  renderSync();
+}
+
 async function boot() {
   try {
     const b = await api('/bootstrap');
-    Object.assign(S, {
-      tasks: b.tasks, projects: b.projects, places: b.places, settings: b.settings, today: b.today,
-      doneToday: b.doneToday, google: b.googleConnected, vapid: b.vapidPublicKey, email: b.email,
-    });
+    applyBootstrap(b);
+    markSynced(b);
   } catch (e) {
     if (!$('#login').hidden) return;
-    document.body.innerHTML = `<div class="login"><div class="login-card"><h1>Fehler</h1><p>${esc(e.message)}</p><a class="btn" href="/">Neu laden</a></div></div>`;
-    return;
+    const cached = store.get('bootstrap', null);
+    if (e instanceof OfflineError && cached) {
+      applyBootstrap(cached);
+      // the cached "today" may be stale
+      const d = new Date();
+      S.today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    } else {
+      document.body.innerHTML = `<div class="login"><div class="login-card"><h1>${e instanceof OfflineError ? 'Offline' : 'Fehler'}</h1><p>${esc(e instanceof OfflineError ? 'Keine Verbindung und noch keine gespeicherten Daten auf diesem Gerät.' : e.message)}</p><a class="btn" href="/">Neu laden</a></div></div>`;
+      return;
+    }
   }
   $('#login').hidden = true;
   $('#app').hidden = false;
+  for (const [k, v] of Object.entries(store.get('cal', {}))) S.cal.set(k, { at: 0, data: v });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   bindGlobal();
   route();
-  setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 60000);
+  renderSync();
+  if (queue.length && net.online) sync();
+  setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, net.online ? 60000 : 60000);
+  setInterval(() => { if (!net.online && document.visibilityState === 'visible') refresh(); }, 15000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+  window.addEventListener('online', () => refresh());
+  window.addEventListener('offline', () => setOnline(false));
 }
 
 let refreshing = false;
@@ -91,14 +142,68 @@ async function refresh() {
   if (refreshing) return;
   refreshing = true;
   try {
+    if (queue.length) await sync({ silent: true });
     const b = await api('/bootstrap');
     const dayChanged = b.today !== S.today;
-    Object.assign(S, { tasks: b.tasks, projects: b.projects, places: b.places, settings: b.settings, today: b.today, doneToday: b.doneToday, google: b.googleConnected });
+    applyBootstrap(b);
+    markSynced(b);
     if (dayChanged) S.cal.clear();
     const typing = document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
     if (!typing) { render(); if (S.openId) renderDrawer(); }
     else renderNav();
   } catch { /* offline – ignore */ } finally { refreshing = false; }
+}
+
+/** Sends queued offline changes to the server, in order. */
+async function sync({ silent = false } = {}) {
+  if (net.syncing || !queue.length) return;
+  net.syncing = true;
+  renderSync();
+  let sent = 0;
+  try {
+    while (queue.length) {
+      const q = queue[0];
+      try {
+        if (q.op === 'create') await api('/tasks', { method: 'POST', body: { ...q.input, id: q.id } });
+        if (q.op === 'complete') await api(`/tasks/${q.id}/complete`, { method: 'POST' });
+        sent++;
+      } catch (e) {
+        if (e instanceof OfflineError) break;
+        toast(`Nicht synchronisiert: ${q.op === 'create' ? '„' + q.task.title + '“' : 'Abhaken'} – ${e.message}`);
+      }
+      queue.shift();
+      saveQueue();
+    }
+  } finally {
+    net.syncing = false;
+    renderSync();
+  }
+  if (sent && !silent) { toast(`${sent} Offline-Änderung(en) synchronisiert`); refresh(); }
+  else if (sent) toast(`${sent} Offline-Änderung(en) synchronisiert`);
+}
+
+function fmtSync(iso) {
+  if (!iso) return 'noch nie';
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const day = localDateOf(iso) === S.today ? '' : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' ';
+  return day + time;
+}
+
+function renderSync() {
+  const el = $('#sync');
+  if (!el) return;
+  const n = queue.length;
+  let cls, label, short, title;
+  if (net.syncing) { cls = 'busy'; label = 'Synchronisiere …'; short = 'Sync …'; title = label; }
+  else if (!net.online) { cls = 'off'; label = `Offline · Stand ${fmtSync(net.lastSync)}`; short = `Offline · ${fmtSync(net.lastSync)}`; title = `Keine Verbindung (Stand ${fmtSync(net.lastSync)}). Hinzufügen und Abhaken geht trotzdem – wird später übertragen.`; }
+  else if (n) { cls = 'wait'; label = `${n} ausstehend`; short = `${n} ⏳`; title = 'Tippen zum Synchronisieren'; }
+  else { cls = 'ok'; label = `Verbunden · ${fmtSync(net.lastSync)}`; short = `Sync ${fmtSync(net.lastSync)}`; title = `Verbunden · letzte Synchronisierung ${fmtSync(net.lastSync)}`; }
+  if (n && !net.syncing && !net.online) { label += ` · ${n} ausstehend`; short += ` · ${n}`; }
+  el.className = 'sync ' + cls;
+  el.title = title;
+  el.setAttribute('aria-label', title);
+  el.innerHTML = `<span class="sync-dot"></span><span class="sync-label">${esc(label)}</span><span class="sync-short">${esc(short)}</span>`;
 }
 
 // ---------------------------------------------------------------- derived
@@ -156,8 +261,13 @@ async function events(from, to) {
   if (c?.pending) return c.pending;
   const pending = api(`/calendar?from=${from}&to=${to}`).then((data) => {
     S.cal.set(key, { at: Date.now(), data });
+    const saved = store.get('cal', {});
+    saved[key] = data;
+    const keys = Object.keys(saved);
+    if (keys.length > 12) delete saved[keys[0]];
+    store.set('cal', saved);
     return data;
-  }).catch((e) => ({ connected: S.google, events: [], error: e.message }));
+  }).catch((e) => c?.data || { connected: S.google, events: [], error: e instanceof OfflineError ? '' : e.message, offline: e instanceof OfflineError });
   S.cal.set(key, { at: 0, pending, data: c?.data });
   return pending;
 }
@@ -303,6 +413,7 @@ function taskRow(t, { showProject = true, showDate = true, sub = false, showPare
   if (subs) meta.push(`<span>${icon('sub')}${subs}</span>`);
   if (t.place_id) meta.push(`<span>${icon('pin')}${esc(S.places.find((p) => p.id === t.place_id)?.name || '')}</span>`);
   for (const l of t.labels) meta.push(`<span class="label">@${esc(l)}</span>`);
+  if (t._pending) meta.push(`<span class="pending">${icon('clock')}wartet auf Sync</span>`);
   if (showParent && t.parent_id && byId(t.parent_id)) meta.push(`<span>↳ ${esc(byId(t.parent_id).title)}</span>`);
   const p = project(t.project_id);
   const showP = showProject && p && p.id !== 'inbox';
@@ -715,7 +826,14 @@ function upsert(task) {
   if (i >= 0) S.tasks[i] = task; else S.tasks.push(task);
 }
 
+function offlineBlocked() {
+  if (net.online) return false;
+  toast('Offline – nur Hinzufügen und Abhaken möglich');
+  return true;
+}
+
 async function saveTask(id, patch, { silent = false } = {}) {
+  if (offlineBlocked()) { if (S.openId === id) renderDrawer(); throw new OfflineError('offline'); }
   try {
     const t = await api('/tasks/' + id, { method: 'PATCH', body: patch });
     upsert(t);
@@ -731,8 +849,29 @@ async function saveTask(id, patch, { silent = false } = {}) {
   }
 }
 
+function localTask(id, input) {
+  const now = new Date().toISOString();
+  return {
+    id, project_id: input.project_id || (input.parent_id ? byId(input.parent_id)?.project_id : null) || 'inbox', parent_id: input.parent_id || null,
+    title: input.title, notes: input.notes || '', priority: input.priority || 4, due_date: input.due_date || null,
+    due_time: input.due_time || null, duration_min: input.duration_min || null, recurrence: input.recurrence || null,
+    labels: input.labels || [], reminders: [], place_id: null, place_event: null, sort: 0, completed_at: null,
+    created_at: now, updated_at: now, _pending: true,
+  };
+}
+
 async function createTask(input) {
-  const t = await api('/tasks', { method: 'POST', body: input });
+  const id = newId();
+  let t;
+  try {
+    t = await api('/tasks', { method: 'POST', body: { ...input, id } });
+  } catch (e) {
+    if (!(e instanceof OfflineError)) throw e;
+    t = localTask(id, input);
+    queue.push({ op: 'create', id, input, task: t });
+    saveQueue();
+    renderSync();
+  }
   upsert(t);
   render();
   if (S.openId) renderDrawer();
@@ -744,6 +883,20 @@ async function complete(id) {
   if (!before) return;
   const rows = $$(`[data-task="${id}"]`);
   rows.forEach((r) => r.classList.add('done-anim'));
+  if (!net.online || before._pending) {
+    // offline (or not yet uploaded): queue it
+    const qi = queue.findIndex((q) => q.op === 'create' && q.id === id);
+    if (qi >= 0 && !before.recurrence) { queue.splice(qi, 1); } else queue.push({ op: 'complete', id });
+    saveQueue();
+    S.tasks = S.tasks.filter((t) => t.id !== id && t.parent_id !== id);
+    S.doneToday++;
+    if (S.openId === id) closeDrawer();
+    renderSync();
+    toast(net.online ? 'Erledigt' : 'Erledigt (offline) – wird synchronisiert');
+    setTimeout(render, 220);
+    if (net.online) sync({ silent: true });
+    return;
+  }
   try {
     const r = await api(`/tasks/${id}/complete`, { method: 'POST' });
     S.doneToday++;
@@ -769,6 +922,7 @@ async function complete(id) {
     setTimeout(() => { render(); if (S.openId && S.openId !== id) renderDrawer(); }, 220);
   } catch (e) {
     rows.forEach((x) => x.classList.remove('done-anim'));
+    if (e instanceof OfflineError) return complete(id);
     toast(e.message);
   }
 }
@@ -1011,7 +1165,8 @@ async function submitQuickAdd(e) {
   try {
     const t = await createTask(input);
     closeQuickAdd();
-    toast(`„${t.title}“ hinzugefügt`, 'Öffnen', () => openTask(t.id));
+    if (t._pending) toast(`„${t.title}“ offline gespeichert – wird synchronisiert`);
+    else toast(`„${t.title}“ hinzugefügt`, 'Öffnen', () => openTask(t.id));
   } catch (err) {
     toast(err.message);
   }
@@ -1118,6 +1273,7 @@ function bindGlobal() {
       if (a === 'close') return closeDrawer();
       if (a === 'delete') {
         const t = drawerTask;
+        if (offlineBlocked()) return;
         if (!confirm(`„${t.title}“ löschen?`)) return;
         await api('/tasks/' + t.id, { method: 'DELETE' });
         S.tasks = S.tasks.filter((x) => x.id !== t.id && x.parent_id !== t.id);
@@ -1152,6 +1308,7 @@ function bindGlobal() {
       S.places = S.places.filter((p) => p.id !== dp.dataset.delPlace);
       return viewSettings();
     }
+    if (el.closest('#sync')) { if (queue.length) return sync(); return refresh(); }
     const cp = el.closest('[data-copy]');
     if (cp) return copy(cp.dataset.copy);
     if (el.closest('[data-reschedule-overdue]')) {
