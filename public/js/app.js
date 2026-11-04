@@ -44,6 +44,10 @@ const P = {
   ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3" fill="currentColor"/>',
+  pause: '<rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/>',
+  stop: '<rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/>',
   grid: '<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>',
   heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>',
   steps: '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0zM20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0z"/>',
@@ -100,8 +104,10 @@ function applyBootstrap(b) {
     tasks: b.tasks, projects: b.projects, places: b.places, settings: b.settings, today: b.today,
     doneToday: b.doneToday, google: b.googleConnected, vapid: b.vapidPublicKey, email: b.email,
     mode: b.mode || S.mode, logos: b.logos || S.logos || {}, logoStyles: b.logoStyles || S.logoStyles || {},
+    focus: b.focus !== undefined ? b.focus : S.focus, focusAt: Date.now(), streaks: b.streaks || S.streaks || {},
   });
   renderMode();
+  renderFocusPill();
   // tasks created offline that are not on the server yet
   for (const q of queue) if (q.op === 'create' && !S.tasks.some((t) => t.id === q.id)) S.tasks.push(q.task);
   for (const q of queue) if (q.op === 'complete') S.tasks = S.tasks.filter((t) => t.id !== q.id && t.parent_id !== q.id);
@@ -430,7 +436,7 @@ function parseRoute() {
   const [name, ...rest] = h.split('/');
   const arg = rest.join('/');
   if (name === 'task' && arg) return { name: 'task', id: arg };
-  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings', 'health'].includes(name)) return { name, arg };
+  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings', 'health', 'habits'].includes(name)) return { name, arg };
   if (name === 'project' && arg) return { name, arg };
   if (name === 'label' && arg) return { name, arg };
   if (name === 'search') return { name, arg: arg || '' };
@@ -464,7 +470,7 @@ function render() {
   const r = S.route;
   $('#top-actions').innerHTML = '';
   $('#view-sub').textContent = '';
-  const views = { dashboard: viewDashboard, health: viewHealth, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
+  const views = { dashboard: viewDashboard, health: viewHealth, habits: viewHabits, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
   document.body.dataset.view = r.name;
   (views[r.name] || viewDashboard)();
   document.title = $('#view-title').textContent + ' · NTD’s';
@@ -487,7 +493,8 @@ function renderNav() {
     item('#/week', icon('week'), 'Diese Woche', c.week || '', active('week')) +
     item('#/upcoming', icon('upcoming'), 'Demnächst', '', active('upcoming')) +
     item('#/inbox', icon('inbox'), 'Eingang', c.inbox || '', active('inbox')) +
-    item('#/health', icon('heart'), 'Gesundheit', '', active('health'));
+    item('#/health', icon('heart'), 'Gesundheit', '', active('health')) +
+    item('#/habits', icon('flame'), 'Gewohnheiten', '', active('habits'));
 
   const perProject = new Map();
   for (const t of open()) if (!t.parent_id) perProject.set(t.project_id, (perProject.get(t.project_id) || 0) + 1);
@@ -508,13 +515,42 @@ function renderNav() {
 
   $$('.sidebar-foot .nav-item').forEach((a) => a.classList.toggle('active', a.dataset.route === r.name));
 
-  $('#tabbar').innerHTML = [
-    ['#/dashboard', 'dashboard', 'Übersicht', 0, 'grid'],
-    ['#/today', 'today', 'Heute', c.today + c.overdue],
-    ['#/week', 'week', 'Woche', 0],
-    ['#/upcoming', 'upcoming', 'Demnächst', 0],
-  ].map(([h, n, l, b, ic]) => `<a href="${h}" class="${r.name === n ? 'active' : ''}">${icon(ic || n)}<span>${l}</span>${b ? `<span class="badge">${b}</span>` : ''}</a>`).join('') +
+  $('#tabbar').innerHTML = tabConfig().map((k) => {
+    const o = TAB_OPTIONS[k];
+    const b = k === 'today' ? c.today + c.overdue : k === 'inbox' ? c.inbox : 0;
+    return `<a href="#/${k}" class="${r.name === k ? 'active' : ''}">${icon(o.icon)}<span>${o.label}</span>${b ? `<span class="badge">${b}</span>` : ''}</a>`;
+  }).join('') +
     `<a href="#" data-menu>${icon('menu')}<span>Mehr</span></a>`;
+}
+
+const TAB_OPTIONS = {
+  dashboard: { label: 'Übersicht', icon: 'grid' },
+  today: { label: 'Heute', icon: 'today' },
+  week: { label: 'Woche', icon: 'week' },
+  upcoming: { label: 'Demnächst', icon: 'upcoming' },
+  inbox: { label: 'Eingang', icon: 'inbox' },
+  habits: { label: 'Streaks', icon: 'flame' },
+  health: { label: 'Gesundheit', icon: 'heart' },
+  search: { label: 'Suche', icon: 'search' },
+  completed: { label: 'Erledigt', icon: 'done' },
+};
+const TAB_DEFAULT = ['dashboard', 'today', 'week', 'upcoming'];
+function tabConfig() {
+  const t = store.get('tabs', TAB_DEFAULT).filter((k) => k in TAB_OPTIONS);
+  return t.length ? t.slice(0, 4) : TAB_DEFAULT;
+}
+function renderTabSettings() {
+  const box = $('#tab-settings');
+  if (!box) return;
+  const sel = tabConfig();
+  const order = [...sel, ...Object.keys(TAB_OPTIONS).filter((k) => !sel.includes(k))];
+  box.innerHTML = order.map((k) => {
+    const on = sel.includes(k), i = sel.indexOf(k);
+    return `<div class="dash-set-row${on ? '' : ' off'}">
+      <label class="dlg-check" style="padding:0;flex:1"><input type="checkbox" ${on ? 'checked' : ''} data-act="tab-toggle" data-tab="${k}"><span><b>${TAB_OPTIONS[k].label}</b></span></label>
+      ${on ? `<button class="icon-btn sm" data-act="tab-up" data-tab="${k}" ${i === 0 ? 'disabled' : ''} aria-label="Nach links"><svg viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></button><button class="icon-btn sm" data-act="tab-down" data-tab="${k}" ${i === sel.length - 1 ? 'disabled' : ''} aria-label="Nach rechts"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>` : ''}
+    </div>`;
+  }).join('') + `<p class="muted small" style="margin-top:8px">${sel.length}/4 gewählt · „Mehr“ ist immer ganz rechts. Reihenfolge: oben = links.</p>`;
 }
 
 function setTitle(title, sub) {
@@ -556,7 +592,8 @@ function taskRow(t, { showProject = true, showDate = true, sub = false, showPare
   else if (t.due_time) meta.push(`<span class="${dueClass(t)}">${icon('clock')}${t.due_time}</span>`);
   if (t.deadline) { const di = deadlineInfo(t.deadline); meta.push(`<span class="deadline ${di.cls}" title="Deadline ${esc(t.deadline)}">${icon('target')}${di.text}</span>`); }
   if (t.duration_min) meta.push(`<span>${icon('timer')}${fmtDuration(t.duration_min)}</span>`);
-  if (t.recurrence) meta.push(`<span title="${esc(recurrenceLabel(t.recurrence))}">${icon('repeat')}</span>`);
+  if (t.recurrence) meta.push(`<span title="${esc(recurrenceLabel(t.recurrence))}">${icon('repeat')}${S.streaks?.[t.id] >= 2 ? `<b class="streak">🔥${S.streaks[t.id]}</b>` : ''}</span>`);
+  if (S.focus?.task_id === t.id) meta.push(`<span class="focus-on">${icon('timer')}Fokus läuft</span>`);
   const subs = open().filter((s) => s.parent_id === t.id).length;
   if (subs) meta.push(`<span>${icon('sub')}${subs}</span>`);
   if (t.place_id) meta.push(`<span>${icon('pin')}${esc(S.places.find((p) => p.id === t.place_id)?.name || '')}</span>`);
@@ -973,6 +1010,7 @@ const DASH_CARDS = {
   sleep: 'Schlaf',
   deadlines: 'Deadlines',
   done: 'Erledigt (7 Tage)',
+  habits: 'Streaks',
 };
 function dashConfig() {
   const narrow = window.innerWidth <= 860;
@@ -1062,6 +1100,15 @@ function viewDashboard() {
   drawHealth(healthCache);
   loadHealth().then((h) => { if (S.route.name === 'dashboard') drawHealth(h); });
 
+  // habits
+  const drawHabits = (h) => {
+    const list = (h?.habits || []).filter(inScope).slice(0, 5);
+    fill('habits', `<div class="dcard-head"><h2>${icon('flame')}Streaks</h2>${link('#/habits', 'Alle')}</div>
+      ${list.length ? list.map((x) => `<a class="habit-row" href="#/habits"><span class="hflame${x.current ? '' : ' cold'}">🔥 ${x.current}</span><span class="htitle">${esc(x.title)}</span><span class="hdots">${last7(x).map((v) => `<i class="d${v}"></i>`).join('')}</span></a>`).join('') : '<div class="empty">Noch keine wiederkehrenden Aufgaben.</div>'}`);
+  };
+  drawHabits(habitsCache);
+  loadHabits().then((h) => { if (S.route.name === 'dashboard') drawHabits(h); });
+
   // completions
   const drawDone = (st) => {
     if (!st) { fill('done', `<div class="dcard-head"><h2>${icon('done')}Erledigt</h2></div><div class="empty">Lädt …</div>`); return; }
@@ -1072,6 +1119,136 @@ function viewDashboard() {
   };
   drawDone(doneStats);
   loadDoneStats().then((st) => { if (S.route.name === 'dashboard') drawDone(st); });
+}
+
+// ---------------------------------------------------------------- habits
+let habitsCache = store.get('habits', null);
+async function loadHabits() {
+  try { habitsCache = await api('/habits?days=84'); store.set('habits', habitsCache); } catch { /* offline */ }
+  return habitsCache;
+}
+/** last 7 days: 1 done, -1 missed, 0 open today, x not scheduled */
+function last7(h) {
+  const out = [];
+  for (let i = 6; i >= 0; i--) { const d = addDays(S.today, -i); out.push(d in h.grid ? h.grid[d] : 'x'); }
+  return out;
+}
+function heatmap(h) {
+  const weeks = 12;
+  const start = addDays(mondayOf(S.today), -7 * (weeks - 1));
+  let cols = '';
+  for (let w = 0; w < weeks; w++) {
+    let cells = '';
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(start, w * 7 + d);
+      const v = day > S.today ? 'f' : day in h.grid ? h.grid[day] : 'x';
+      cells += `<i class="hm d${v}${day === S.today ? ' today' : ''}" title="${day}"></i>`;
+    }
+    cols += `<div class="hm-col">${cells}</div>`;
+  }
+  return `<div class="hm-wrap"><div class="hm-days">${['M', '', 'M', '', 'F', '', 'S'].map((x) => `<span>${x}</span>`).join('')}</div>${cols}</div>`;
+}
+async function viewHabits() {
+  setTitle(window.innerWidth <= 860 ? 'Streaks' : 'Gewohnheiten', 'Deine wiederkehrenden Aufgaben');
+  const draw = (h) => {
+    if (S.route.name !== 'habits') return;
+    if (!h) { $('#content').innerHTML = '<div class="panel"><div class="empty">Lädt …</div></div>'; return; }
+    const list = (h.habits || []).filter(inScope);
+    if (!list.length) { $('#content').innerHTML = `<div class="panel">${emptyHtml('🔥', 'Noch keine wiederkehrenden Aufgaben. Sobald du welche abhakst, entstehen hier Serien.')}</div>`; return; }
+    $('#content').innerHTML = `<div class="habits">${list.map((x) => {
+      const p = project(x.project_id);
+      return `<section class="dcard habit" data-task="${x.task_id}">
+        <div class="habit-top"><div class="habit-flame${x.current ? '' : ' cold'}"><span>🔥</span><b>${x.current}</b></div>
+          <div class="habit-info"><div class="habit-title">${esc(x.title)}</div><div class="muted small">${esc(recurrenceLabel(x.recurrence))}${p && p.id !== 'inbox' ? ' · ' + esc(projectPath(p.id)) : ''}</div></div></div>
+        <div class="kpis"><div><b>${x.current}</b><span>aktuell</span></div><div><b>${x.best}</b><span>Rekord</span></div><div><b>${x.rate_30 == null ? '–' : x.rate_30 + '%'}</b><span>letzte 30 Tage</span></div></div>
+        ${heatmap(x)}
+      </section>`;
+    }).join('')}</div>
+    <p class="muted small center">Grün = erledigt · Rot = verpasst · Grau = nicht fällig. Nachträglich Abhaken zählt, solange es vor dem nächsten Termin passiert.</p>`;
+  };
+  draw(habitsCache);
+  draw(await loadHabits());
+}
+
+// ---------------------------------------------------------------- focus timer
+let focusTick = null;
+function focusRemaining() {
+  const f = S.focus;
+  if (!f) return 0;
+  const drift = f.paused ? 0 : Math.floor((Date.now() - (S.focusAt || Date.now())) / 1000);
+  return f.remaining_sec - drift;
+}
+const fmtClock = (sec) => { const neg = sec < 0; sec = Math.abs(sec); const m = Math.floor(sec / 60), s2 = sec % 60; return `${neg ? '+' : ''}${m}:${String(s2).padStart(2, '0')}`; };
+function renderFocusPill() {
+  const pill = $('#focus-pill');
+  if (!pill) return;
+  clearInterval(focusTick);
+  if (!S.focus) { pill.hidden = true; return; }
+  pill.hidden = false;
+  const draw = () => {
+    if (!S.focus) return;
+    const r = focusRemaining();
+    pill.classList.toggle('over', r < 0);
+    pill.classList.toggle('paused', !!S.focus.paused);
+    pill.innerHTML = `${icon(S.focus.paused ? 'pause' : 'timer')}<span>${fmtClock(r)}</span>`;
+    const big = $('#focus-big');
+    if (big) big.textContent = fmtClock(r);
+  };
+  draw();
+  focusTick = setInterval(draw, 1000);
+}
+async function focusAction(path, body) {
+  try {
+    const r = await api('/focus/' + path, { method: 'POST', body });
+    S.focus = r.focus; S.focusAt = Date.now();
+    renderFocusPill();
+    if (r.stopped?.task_id) { const t = byId(r.stopped.task_id); if (t) t.focus_sec = (t.focus_sec || 0) + r.stopped.elapsed_sec; }
+    render();
+    if (S.openId) renderDrawer();
+    return r;
+  } catch (e) { toast(e.message); throw e; }
+}
+async function startFocusFor(t) {
+  if (offlineBlocked()) return;
+  const opts = [...new Set([15, 25, 45, 60, 90, ...(t?.duration_min ? [t.duration_min] : [])])].sort((a, b) => a - b);
+  const r = await dialog({
+    title: `⏱ Fokus${t ? ': ' + t.title : ''}`,
+    fields: [{ name: 'min', label: 'Dauer', type: 'select', options: opts.map((m) => `<option value="${m}" ${m === (t?.duration_min || 25) ? 'selected' : ''}>${fmtDuration(m)}${m === t?.duration_min ? ' (geplant)' : ''}</option>`).join('') }],
+    ok: 'Starten',
+  });
+  if (!r) return;
+  await focusAction('start', { task_id: t?.id, minutes: +r.min });
+  toast(`Fokus gestartet · ${r.min} Min.`);
+  if (store.get('focusShortcut', false)) {
+    location.href = `shortcuts://run-shortcut?name=${encodeURIComponent('NTD Fokus')}&input=text&text=${r.min}`;
+  }
+}
+function openFocusPanel() {
+  const f = S.focus;
+  if (!f) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'modal open';
+  wrap.innerHTML = `<div class="qa-card mode-card focus-card"><div class="muted">Fokus</div><div class="focus-title">${esc(f.title)}</div>
+    <div id="focus-big" class="focus-big">${fmtClock(focusRemaining())}</div><div class="muted center">geplant ${fmtDuration(f.planned_min)}${f.paused ? ' · pausiert' : ''}</div>
+    <div class="focus-btns"><button class="btn" data-f="${f.paused ? 'resume' : 'pause'}">${icon(f.paused ? 'play' : 'pause')}${f.paused ? 'Weiter' : 'Pause'}</button><button class="btn" data-f="extend">+5 Min.</button><button class="btn primary" data-f="stop">${icon('stop')}Beenden</button></div>
+    ${f.task_id ? `<button class="btn ghost sm" data-f="open" style="width:100%;margin-top:8px">Aufgabe öffnen</button>` : ''}</div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', async (e) => {
+    if (e.target === wrap) return wrap.remove();
+    const b = e.target.closest('[data-f]');
+    if (!b) return;
+    const a = b.dataset.f;
+    wrap.remove();
+    if (a === 'open') return openTask(f.task_id);
+    if (a === 'stop') {
+      const r = await focusAction('stop');
+      const sec = r.stopped?.elapsed_sec || 0;
+      toast(`Fokus beendet · ${fmtDuration(Math.max(1, Math.round(sec / 60)))}`);
+      return;
+    }
+    await focusAction(a, a === 'extend' ? { minutes: 5 } : undefined);
+    openFocusPanel();
+  });
 }
 
 // ---------------------------------------------------------------- health view
@@ -1248,6 +1425,26 @@ async function viewSettings() {
     </div>
 
     <div class="panel">
+      <h2>Menüleiste unten</h2>
+      <p>Welche 4 Punkte die Leiste auf dem Handy zeigt (gilt für <b>dieses Gerät</b>).</p>
+      <div id="tab-settings"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Fokus-Timer</h2>
+      <p>Starte den Timer in einer Aufgabe (▶︎ Fokus). Die Zeit wird an der Aufgabe gespeichert, am Ende kommt eine Push-Nachricht.</p>
+      <label class="dlg-check" style="padding:4px 0 8px"><input type="checkbox" data-act="focus-shortcut" ${store.get('focusShortcut', false) ? 'checked' : ''}><span><b>Timer auch in der Dynamic Island (iPhone)</b><small>Startet zusätzlich den Timer der Uhr-App über einen Kurzbefehl (pro Gerät)</small></span></label>
+      <details><summary style="cursor:pointer;font-weight:600;font-size:14px">Kurzbefehl einrichten (einmalig)</summary>
+        <ol>
+          <li>App <b>Kurzbefehle</b> → <b>+</b> → Name exakt: <b>NTD Fokus</b></li>
+          <li>Aktion <b>„Timer starten“</b> hinzufügen.</li>
+          <li>Bei der Dauer auf die Zahl tippen → Variable <b>„Kurzbefehl-Eingabe“</b> wählen, Einheit <b>Minuten</b>.</li>
+          <li>Fertig. Beim Fokus-Start öffnet NTD's kurz die Kurzbefehle-App, der Timer läuft dann in der Dynamic Island. Zurück zur App: von unten wischen bzw. oben links „◀ NTD's“.</li>
+        </ol>
+      </details>
+    </div>
+
+    <div class="panel">
       <h2>Übersicht anpassen</h2>
       <p>Welche Kacheln die Startseite zeigt und in welcher Reihenfolge. Gilt nur für <b>dieses Gerät</b> (${window.innerWidth <= 860 ? 'Handy-Ansicht' : 'große Ansicht'}).</p>
       <div id="dash-settings"></div>
@@ -1259,6 +1456,7 @@ async function viewSettings() {
     </div>
   </div>`;
   renderDashSettings();
+  renderTabSettings();
   api('/location-token').then((d) => {
     const base = location.origin + '/hooks/mode?token=' + d.token + '&mode=';
     if ($('#mode-url-work')) { $('#mode-url-work').textContent = base + 'work'; $('#mode-url-private').textContent = base + 'private'; }
@@ -1314,6 +1512,21 @@ async function settingsAction(act, el) {
     if (!confirm('Neuen Schlüssel erzeugen? Die URL in Health Auto Export muss dann angepasst werden.')) return;
     const d = await api('/health-token', { method: 'POST' });
     $('#health-url').textContent = d.url;
+  } else if (act === 'tab-toggle' || act === 'tab-up' || act === 'tab-down') {
+    let sel = tabConfig();
+    const k = el.dataset.tab;
+    if (act === 'tab-toggle') {
+      if (sel.includes(k)) { if (sel.length <= 1) { toast('Mindestens ein Punkt'); return renderTabSettings(); } sel = sel.filter((x) => x !== k); }
+      else { if (sel.length >= 4) { toast('Maximal 4 – erst einen anderen abwählen'); return renderTabSettings(); } sel.push(k); }
+    } else {
+      const i = sel.indexOf(k), j = act === 'tab-up' ? i - 1 : i + 1;
+      if (j >= 0 && j < sel.length) [sel[i], sel[j]] = [sel[j], sel[i]];
+    }
+    store.set('tabs', sel);
+    renderTabSettings(); renderNav();
+  } else if (act === 'focus-shortcut') {
+    store.set('focusShortcut', el.checked);
+    toast(el.checked ? 'Dynamic Island an' : 'Dynamic Island aus');
   } else if (act === 'dash-up' || act === 'dash-down' || act === 'dash-toggle') {
     const cfg = dashConfig();
     const k = el.dataset.card;
@@ -1522,6 +1735,9 @@ function renderDrawer() {
 
     <label>${icon('target')}Deadline</label>
     <div class="row"><input type="date" data-f="deadline" value="${t.deadline || ''}">${t.deadline ? `<button class="icon-btn sm" data-clear="deadline" aria-label="Deadline entfernen">${icon('x')}</button><span class="deadline-hint ${deadlineInfo(t.deadline).cls}">${deadlineInfo(t.deadline).text}</span>` : ''}</div>
+
+    <label>${icon('play')}Fokus</label>
+    <div class="row">${S.focus?.task_id === t.id ? `<button class="btn sm primary" data-focus-panel>${icon('timer')}läuft · Steuern</button>` : `<button class="btn sm" data-focus-start="${t.id}">${icon('play')}Fokus starten</button>`}${t.focus_sec ? `<span class="muted small">${fmtDuration(Math.max(1, Math.round(t.focus_sec / 60)))} fokussiert${t.duration_min ? ` · geplant ${fmtDuration(t.duration_min)}` : ''}</span>` : ''}</div>
 
     <label>${icon('timer')}Dauer</label>
     <div class="row"><select data-f="duration_min"><option value="">–</option>${durOpts.map((m) => `<option value="${m}" ${t.duration_min === m ? 'selected' : ''}>${fmtDuration(m)}</option>`).join('')}<option value="custom">Andere …</option></select></div>
@@ -1946,6 +2162,9 @@ function bindGlobal() {
     }
     if (el.closest('#search-btn')) return go('#/search');
     if (el.closest('#mode-pill')) return openModeMenu();
+    if (el.closest('#focus-pill') || el.closest('[data-focus-panel]')) return openFocusPanel();
+    const fs = el.closest('[data-focus-start]');
+    if (fs) return startFocusFor(byId(fs.dataset.focusStart));
     if (el.closest('#sync')) { if (queue.length) return sync(); return refresh(); }
     const wd = el.closest('[data-workday]');
     if (wd) {

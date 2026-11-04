@@ -4,6 +4,8 @@ import * as T from './tasks.js';
 import { listEvents, GoogleNotConnected } from './google.js';
 import { healthSummary } from './health.js';
 import { computeMode, setMode, setHoliday, contextOf } from './mode.js';
+import { habits } from './habits.js';
+import { activeFocus } from './focus.js';
 import { localNow, addDays, isoWeekday, zonedToUtc } from './time.js';
 
 const PROTOCOL_VERSIONS = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -174,6 +176,12 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_habits',
+    description: 'Gewohnheiten/Streaks: für jede wiederkehrende Aufgabe aktuelle Serie, Rekord und Erfüllungsquote der letzten 30 Tage.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: 'get_health',
     description: 'Apple-Health-Daten des Nutzers pro Tag (Schritte inkl. Tagesziel, Schlaf mit Phasen, aktive Energie, Ruhepuls, Gewicht …), sofern synchronisiert.',
     inputSchema: { type: 'object', properties: { days: { type: 'integer', default: 7, minimum: 1, maximum: 90 } } },
@@ -253,6 +261,7 @@ function view(c, t, all) {
   if (t.due_time) out.due_time = t.due_time;
   if (t.duration_min) out.duration_min = t.duration_min;
   if (t.deadline) out.deadline = t.deadline;
+  if (t.focus_sec) out.focus_minutes = Math.round(t.focus_sec / 60);
   if (t.recurrence) out.recurrence = t.recurrence;
   if (t.labels.length) out.labels = t.labels;
   if (t.notes) out.notes = t.notes.length > 300 ? t.notes.slice(0, 300) + '…' : t.notes;
@@ -426,6 +435,10 @@ async function callTool(env, name, a = {}) {
       else if (a.holiday_from || a.holiday_to) await setHoliday(env, { from: a.holiday_from, to: a.holiday_to || a.holiday_from });
       if (a.mode) return setMode(env, a.mode);
       return computeMode(env);
+    }
+    case 'get_habits': {
+      const h = await habits(env, { days: 1 });
+      return { today: h.today, habits: h.habits.map(({ grid, ...x }) => ({ ...x, project: projectPath(c, x.project_id) })), active_focus: await activeFocus(env) };
     }
     case 'get_health': {
       const h = await healthSummary(env, a.days || 7);

@@ -5,6 +5,7 @@ import { handleMcp } from './mcp.js';
 import { handleLocationHook, runDueNotifications } from './notify.js';
 import { handleHealthHook } from './health.js';
 import { handleModeHook } from './mode.js';
+import { checkFocus } from './focus.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -149,6 +150,6 @@ export default {
     return provider(new URL(request.url).origin).fetch(request, env, ctx);
   },
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(runDueNotifications(env));
+    ctx.waitUntil(Promise.all([runDueNotifications(env), checkFocus(env)]));
   },
 };

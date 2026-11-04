@@ -84,6 +84,7 @@ export function rowToTask(r) {
     labels: JSON.parse(r.labels || '[]'),
     reminders: JSON.parse(r.reminders || '[]'),
     deadline: r.deadline || null,
+    focus_sec: r.focus_sec || 0,
     place_id: r.place_id,
     place_event: r.place_event,
     sort: r.sort,

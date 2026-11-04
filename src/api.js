@@ -6,6 +6,8 @@ import { localNow, addDays, zonedToUtc } from './time.js';
 import { b64url } from './push.js';
 import { healthSummary } from './health.js';
 import { computeMode, setMode, setHoliday } from './mode.js';
+import { activeFocus, startFocus, pauseFocus, stopFocus, extendFocus } from './focus.js';
+import { habits } from './habits.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
@@ -30,7 +32,8 @@ export async function handleApi(request, env) {
       ]);
       return json({
         today, timezone: env.TIMEZONE, email: env.OWNER_EMAIL, projects, tasks, places, settings,
-        doneToday, vapidPublicKey: vapid.publicKey, mode: await computeMode(env),
+        doneToday, vapidPublicKey: vapid.publicKey, mode: await computeMode(env), focus: await activeFocus(env),
+        streaks: Object.fromEntries((await habits(env, { days: 1 })).habits.map((h) => [h.task_id, h.current])),
         logos: Object.fromEntries(await Promise.all(['work', 'private', 'holiday'].map(async (m) => [m, (await T.getSetting(env, 'logo_v_' + m)) || null]))),
         logoStyles: Object.fromEntries(await Promise.all(['work', 'private', 'holiday'].map(async (m) => [m, (await T.getSetting(env, 'logo_style_' + m)) || 'logo']))),
         googleConnected: !!(await T.getSetting(env, 'google_refresh_token')),
@@ -68,6 +71,13 @@ export async function handleApi(request, env) {
       return json({ token, url: url.origin + '/hooks/location' });
     }
 
+    if (path === '/focus' && method === 'GET') return json({ focus: await activeFocus(env) });
+    if (path === '/focus/start' && method === 'POST') return json({ focus: await startFocus(env, body) });
+    if (path === '/focus/pause' && method === 'POST') return json({ focus: await pauseFocus(env, true) });
+    if (path === '/focus/resume' && method === 'POST') return json({ focus: await pauseFocus(env, false) });
+    if (path === '/focus/extend' && method === 'POST') return json({ focus: await extendFocus(env, body.minutes || 5) });
+    if (path === '/focus/stop' && method === 'POST') return json({ stopped: await stopFocus(env), focus: null });
+    if (path === '/habits' && method === 'GET') return json(await habits(env, { days: +url.searchParams.get('days') || 84 }));
     if (path === '/mode' && method === 'GET') return json(await computeMode(env));
     if (path === '/mode' && method === 'POST') return json(await setMode(env, body.mode));
     if (path === '/holiday' && method === 'POST') return json(await setHoliday(env, body));
