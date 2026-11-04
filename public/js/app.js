@@ -1107,6 +1107,40 @@ let textTimer = null;
 function bindDrawer() {
   const panel = $('#drawer-panel');
   $('#drawer').addEventListener('click', (e) => { if (e.target.id === 'drawer') closeDrawer(); });
+  // swipe down to close (phones: bottom sheet)
+  let startY = null, dy = 0, t0 = 0, dragging = false;
+  panel.addEventListener('touchstart', (e) => {
+    if (window.innerWidth > 860 || panel.scrollTop > 0 || e.touches.length > 1) return;
+    const el = e.target;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && document.activeElement === el) return;
+    startY = e.touches[0].clientY; dy = 0; t0 = Date.now(); dragging = false;
+  }, { passive: true });
+  panel.addEventListener('touchmove', (e) => {
+    if (startY === null) return;
+    const d = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (d > 8 && panel.scrollTop <= 0) { dragging = true; panel.style.transition = 'none'; document.activeElement?.blur?.(); }
+      else if (d < -4) { startY = null; return; }
+      else return;
+    }
+    dy = Math.max(0, d - 8);
+    panel.style.transform = `translateY(${dy}px)`;
+    $('#drawer').style.setProperty('--shade', String(Math.max(0, 1 - dy / 400)));
+    e.preventDefault();
+  }, { passive: false });
+  const endDrag = () => {
+    if (startY === null) return;
+    startY = null;
+    if (!dragging) return;
+    dragging = false;
+    panel.style.transition = '';
+    const fast = dy / Math.max(1, Date.now() - t0) > 0.6;
+    panel.style.transform = '';
+    $('#drawer').style.removeProperty('--shade');
+    if (dy > 110 || (fast && dy > 30)) closeDrawer();
+  };
+  panel.addEventListener('touchend', endDrag);
+  panel.addEventListener('touchcancel', endDrag);
   panel.addEventListener('input', (e) => {
     if (e.target.id === 'd-title' || e.target.id === 'd-notes') {
       autosize(e.target);
