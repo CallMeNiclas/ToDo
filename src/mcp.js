@@ -2,6 +2,7 @@
 // Lets Claude read and manage tasks directly.
 import * as T from './tasks.js';
 import { listEvents, GoogleNotConnected } from './google.js';
+import { healthSummary } from './health.js';
 import { localNow, addDays, isoWeekday, zonedToUtc } from './time.js';
 
 const PROTOCOL_VERSIONS = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -155,6 +156,12 @@ const TOOLS = [
       type: 'object',
       properties: { from_date: { type: 'string', description: 'YYYY-MM-DD, Standard heute' }, to_date: { type: 'string', description: 'YYYY-MM-DD inklusive, Standard = from_date' } },
     },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'get_health',
+    description: 'Apple-Health-Daten des Nutzers pro Tag (Schritte inkl. Tagesziel, Schlaf mit Phasen, aktive Energie, Ruhepuls, Gewicht …), sofern synchronisiert.',
+    inputSchema: { type: 'object', properties: { days: { type: 'integer', default: 7, minimum: 1, maximum: 90 } } },
     annotations: { readOnlyHint: true },
   },
   {
@@ -397,6 +404,15 @@ async function callTool(env, name, a = {}) {
       const from = a.from_date || c.today;
       const to = a.to_date || from;
       return { from, to, events: await calendar(env, from, to) };
+    }
+    case 'get_health': {
+      const h = await healthSummary(env, a.days || 7);
+      const days = h.days.map((d) => {
+        const o = { date: d.date };
+        for (const [k, v] of Object.entries(d)) if (k !== 'date') o[k] = v;
+        return o;
+      });
+      return { today: h.today, step_goal: h.goal, last_sync: h.lastSync, units: h.units, days };
     }
     case 'list_places':
       return { places: c.places.map((p) => ({ id: p.id, name: p.name })) };

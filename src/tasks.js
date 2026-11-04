@@ -30,6 +30,7 @@ export const USER_SETTINGS = {
   default_reminder_min: 15,   // push X minutes before tasks with a time
   p1_mail_time: '08:00',      // P1 tasks without time: mail on due day at
   mail_enabled: 1,
+  step_goal: 10000,           // daily step goal (Apple Health)
 };
 export async function getUserSettings(env) {
   const { results } = await env.DB.prepare("SELECT key, value FROM settings WHERE key LIKE 'u.%'").all();

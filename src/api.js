@@ -4,6 +4,7 @@ import { listEvents, GoogleNotConnected } from './google.js';
 import { getVapid, pushAll } from './notify.js';
 import { localNow, addDays, zonedToUtc } from './time.js';
 import { b64url } from './push.js';
+import { healthSummary } from './health.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
@@ -62,6 +63,25 @@ export async function handleApi(request, env) {
       const token = b64url(crypto.getRandomValues(new Uint8Array(24)));
       await T.setSetting(env, 'location_token', token);
       return json({ token, url: url.origin + '/hooks/location' });
+    }
+
+    if (path === '/health' && method === 'GET') return json(await healthSummary(env, +url.searchParams.get('days') || 14));
+    if (path === '/health-token' && (method === 'GET' || method === 'POST')) {
+      const token = method === 'POST'
+        ? await (async () => { const t = b64url(crypto.getRandomValues(new Uint8Array(24))); await T.setSetting(env, 'health_token', t); return t; })()
+        : await T.ensureSetting(env, 'health_token', () => b64url(crypto.getRandomValues(new Uint8Array(24))));
+      return json({ token, url: `${url.origin}/hooks/health?token=${token}` });
+    }
+    if (path === '/stats/completions' && method === 'GET') {
+      // completions per local day for the last N days
+      const days = Math.min(90, +url.searchParams.get('days') || 7);
+      const today = localNow(env.TIMEZONE).date;
+      const from = addDays(today, -(days - 1));
+      const { results } = await env.DB.prepare('SELECT completed_at FROM completions WHERE completed_at >= ?').bind(zonedToUtc(from, '00:00', env.TIMEZONE).toISOString()).all();
+      const counts = {};
+      for (let i = 0; i < days; i++) counts[addDays(from, i)] = 0;
+      for (const r of results) { const d = localNow(env.TIMEZONE, new Date(r.completed_at)).date; if (d in counts) counts[d]++; }
+      return json({ today, counts });
     }
 
     if (path === '/calendar' && method === 'GET') {

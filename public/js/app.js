@@ -44,6 +44,11 @@ const P = {
   ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  grid: '<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>',
+  heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>',
+  steps: '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0zM20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0z"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+  bars: '<path d="M3 3v18h18"/><path d="M7 16v-4M12 16V8M17 16v-6"/>',
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>',
 };
@@ -344,18 +349,18 @@ function parseRoute() {
   const [name, ...rest] = h.split('/');
   const arg = rest.join('/');
   if (name === 'task' && arg) return { name: 'task', id: arg };
-  if (['today', 'week', 'upcoming', 'inbox', 'completed', 'settings'].includes(name)) return { name, arg };
+  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings', 'health'].includes(name)) return { name, arg };
   if (name === 'project' && arg) return { name, arg };
   if (name === 'label' && arg) return { name, arg };
   if (name === 'search') return { name, arg: arg || '' };
-  return { name: 'today' };
+  return { name: 'dashboard' };
 }
 
 function route() {
   const r = parseRoute();
   if (r.name === 'task') {
     // open detail over the current (or default) view
-    if (!S.route || S.route.name === 'task') S.route = { name: 'today' };
+    if (!S.route || S.route.name === 'task') S.route = { name: 'dashboard' };
     openTask(r.id, false);
     render();
     return;
@@ -378,8 +383,8 @@ function render() {
   const r = S.route;
   $('#top-actions').innerHTML = '';
   $('#view-sub').textContent = '';
-  const views = { today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
-  (views[r.name] || viewToday)();
+  const views = { dashboard: viewDashboard, health: viewHealth, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
+  (views[r.name] || viewDashboard)();
   document.title = $('#view-title').textContent + ' · NTD’s';
   const c = counts();
   if ('setAppBadge' in navigator) {
@@ -395,10 +400,12 @@ function renderNav() {
   const item = (href, ic, label, count, cls = '', key = '') =>
     `<a href="${href}" class="nav-item${cls}" ${key}>${ic}<span>${esc(label)}</span>${count !== undefined && count !== '' ? `<span class="count">${count}</span>` : ''}</a>`;
   $('#nav-main').innerHTML =
+    item('#/dashboard', icon('grid'), 'Übersicht', '', active('dashboard')) +
     item('#/today', icon('today'), 'Heute', c.today + c.overdue || '', active('today')).replace('class="count"', c.overdue ? 'class="count alert"' : 'class="count"') +
     item('#/week', icon('week'), 'Diese Woche', c.week || '', active('week')) +
     item('#/upcoming', icon('upcoming'), 'Demnächst', '', active('upcoming')) +
-    item('#/inbox', icon('inbox'), 'Eingang', c.inbox || '', active('inbox'));
+    item('#/inbox', icon('inbox'), 'Eingang', c.inbox || '', active('inbox')) +
+    item('#/health', icon('heart'), 'Gesundheit', '', active('health'));
 
   const perProject = new Map();
   for (const t of open()) if (!t.parent_id) perProject.set(t.project_id, (perProject.get(t.project_id) || 0) + 1);
@@ -420,11 +427,11 @@ function renderNav() {
   $$('.sidebar-foot .nav-item').forEach((a) => a.classList.toggle('active', a.dataset.route === r.name));
 
   $('#tabbar').innerHTML = [
+    ['#/dashboard', 'dashboard', 'Übersicht', 0, 'grid'],
     ['#/today', 'today', 'Heute', c.today + c.overdue],
     ['#/week', 'week', 'Woche', 0],
     ['#/upcoming', 'upcoming', 'Demnächst', 0],
-    ['#/inbox', 'inbox', 'Eingang', 0],
-  ].map(([h, n, l, b]) => `<a href="${h}" class="${r.name === n ? 'active' : ''}">${icon(n)}<span>${l}</span>${b ? `<span class="badge">${b}</span>` : ''}</a>`).join('') +
+  ].map(([h, n, l, b, ic]) => `<a href="${h}" class="${r.name === n ? 'active' : ''}">${icon(ic || n)}<span>${l}</span>${b ? `<span class="badge">${b}</span>` : ''}</a>`).join('') +
     `<a href="#" data-menu>${icon('menu')}<span>Mehr</span></a>`;
 }
 
@@ -828,7 +835,229 @@ async function viewCompleted() {
     : `<div class="panel">${emptyHtml('🎯', 'Noch nichts erledigt.')}</div>`;
 }
 
+// ---------------------------------------------------------------- health data
+let healthCache = store.get('health', null);
+async function loadHealth(force) {
+  if (!force && healthCache && Date.now() - (healthCache._at || 0) < 2 * 60000) return healthCache;
+  try {
+    const h = await api('/health?days=30');
+    healthCache = { ...h, _at: Date.now() };
+    store.set('health', healthCache);
+  } catch { /* offline: keep cached */ }
+  return healthCache;
+}
+let doneStats = store.get('doneStats', null);
+async function loadDoneStats() {
+  try { doneStats = await api('/stats/completions?days=7'); store.set('doneStats', doneStats); } catch { /* offline */ }
+  return doneStats;
+}
+const fmtNum = (n) => (n == null ? '–' : Math.round(n).toLocaleString('de-DE'));
+const fmtHours = (h) => { if (h == null) return '–'; const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')} Std.`; };
+const timeOfTs = (x) => (x ? String(x).slice(11, 16) : '');
+
+function ringSvg(value, goal, size = 120, stroke = 12, color = 'var(--ok)') {
+  const r = (size - stroke) / 2, L = 2 * Math.PI * r;
+  const pct = goal ? Math.min(1, (value || 0) / goal) : 0;
+  return `<svg class="ring-big" viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px" role="img" aria-label="${Math.round(pct * 100)} Prozent">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round"
+      stroke-dasharray="${L}" stroke-dashoffset="${L * (1 - pct)}" transform="rotate(-90 ${size / 2} ${size / 2})"/>
+  </svg>`;
+}
+
+/** simple bar chart: items [{label, value, hit, title}] (HTML, so labels never distort) */
+function barsSvg(items, { goal, height = 110, color = 'var(--accent)', hitColor = 'var(--ok)', fmt = fmtNum } = {}) {
+  const max = Math.max(goal || 0, ...items.map((i) => i.value || 0), 1);
+  const plot = height - 20;
+  const cols = items.map((it) => {
+    const h = Math.round(((it.value || 0) / max) * plot);
+    return `<div class="bcol" title="${esc(it.title || it.label)}: ${esc(fmt(it.value))}"><div class="bbar-wrap" style="height:${plot}px"><div class="bbar" style="height:${Math.max(h, it.value ? 2 : 0)}px;background:${it.hit ? hitColor : color};opacity:${it.value ? 1 : 0.25}"></div></div><span class="blbl">${esc(it.label)}</span></div>`;
+  }).join('');
+  const goalY = goal ? plot - Math.round((goal / max) * plot) : null;
+  return `<div class="bchart" style="height:${height}px">${goalY !== null ? `<div class="bgoal" style="top:${goalY}px"></div>` : ''}${cols}</div>`;
+}
+
+function weekStepItems(h, n = 7) {
+  const days = (h?.days || []).slice(-n);
+  return days.map((d) => ({ label: WD_SHORT[isoWeekday(d.date)], value: d.step_count || 0, hit: (d.step_count || 0) >= (h.goal || 10000), title: d.date }));
+}
+
+// ---------------------------------------------------------------- dashboard
+const DASH_CARDS = {
+  stats: 'Kennzahlen',
+  today: 'Aufgaben heute',
+  agenda: 'Termine',
+  steps: 'Schritte',
+  sleep: 'Schlaf',
+  deadlines: 'Deadlines',
+  done: 'Erledigt (7 Tage)',
+};
+function dashConfig() {
+  const narrow = window.innerWidth <= 860;
+  const key = narrow ? 'dash.phone' : 'dash.wide';
+  const def = { order: Object.keys(DASH_CARDS), hidden: {} };
+  const c = store.get(key, def);
+  for (const k of Object.keys(DASH_CARDS)) if (!c.order.includes(k)) c.order.push(k);
+  c.order = c.order.filter((k) => k in DASH_CARDS);
+  return { ...c, key };
+}
+
+function viewDashboard() {
+  const t = S.today;
+  const hour = new Date().getHours();
+  const hello = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo' : 'Guten Abend';
+  if (window.innerWidth <= 860) {
+    setTitle('Übersicht', `${hello}, Nic`);
+  } else setTitle(`${hello}, Nic`, fmtLongDate(t));
+  const cfg = dashConfig();
+  const cards = cfg.order.filter((k) => !cfg.hidden[k]);
+  $('#content').innerHTML = `<div class="dash">${cards.map((k) => `<section class="dcard dc-${k}" data-card="${k}"></section>`).join('')}</div>
+    <div class="dash-foot"><a href="#/settings" class="btn sm ghost">${icon('grid')}Übersicht anpassen</a></div>`;
+  const fill = (k, html) => { const el = $(`.dc-${k}`); if (el) el.innerHTML = html; };
+  const link = (href, label) => `<a class="dcard-link" href="${href}">${esc(label)}${icon('right')}</a>`;
+
+  // stats
+  fill('stats', statsHtml());
+
+  // tasks today
+  const overdue = sortTasks(open().filter((x) => x.due_date && x.due_date < t));
+  const today = sortTasks(open().filter((x) => x.due_date === t));
+  const list = [...overdue, ...today];
+  fill('today', `<div class="dcard-head"><h2>${icon('today')}Aufgaben heute</h2>${link('#/today', `Alle ${list.length}`)}</div>
+    ${list.length ? `<div class="dcard-list">${list.slice(0, 6).map((x) => taskRow(x, { showDate: x.due_date !== t })).join('')}</div>${list.length > 6 ? `<a class="dcard-more" href="#/today">+ ${list.length - 6} weitere</a>` : ''}` : emptyHtml('🌤️', 'Nichts mehr für heute.')}`);
+
+  // deadlines
+  const dls = open().filter((x) => x.deadline && x.deadline <= addDays(t, 7)).sort((a, b) => a.deadline.localeCompare(b.deadline));
+  fill('deadlines', `<div class="dcard-head"><h2>${icon('target')}Deadlines</h2><span class="meta">nächste 7 Tage</span></div>
+    ${dls.length ? `<div class="dcard-list">${dls.slice(0, 6).map((x) => taskRow(x)).join('')}</div>` : emptyHtml('🎯', 'Keine Deadlines in den nächsten 7 Tagen.')}`);
+
+  // agenda
+  const drawAgenda = (data) => {
+    const evs = data?.events || [];
+    const now = new Date();
+    const todayEv = eventsOn(evs, t).filter((e) => e.allDay || new Date(e.end) > now);
+    const tomorrowEv = eventsOn(evs, addDays(t, 1));
+    const row = (e) => `<div class="ag-row" data-url="${esc(e.url || '')}"><span class="ag-time">${e.allDay ? 'ganzt.' : timeOf(e.start)}</span><span class="dot" style="background:${esc(e.color)}"></span><span class="ag-title">${esc(e.title)}</span></div>`;
+    fill('agenda', `<div class="dcard-head"><h2>${icon('cal')}Termine</h2>${link('#/today', 'Tagesplan')}</div>
+      ${data && !data.connected ? '<div class="empty">Google Kalender nicht verbunden.</div>' : ''}
+      <div class="ag-group">Heute</div>${todayEv.length ? todayEv.map(row).join('') : '<div class="ag-empty">Keine weiteren Termine</div>'}
+      <div class="ag-group">Morgen</div>${tomorrowEv.length ? tomorrowEv.slice(0, 5).map(row).join('') : '<div class="ag-empty">Keine Termine</div>'}`);
+  };
+  drawAgenda(cachedEvents(t, addDays(t, 2)));
+  events(t, addDays(t, 2)).then((d) => { if (S.route.name === 'dashboard') drawAgenda(d); });
+
+  // health cards
+  const drawHealth = (h) => {
+    if (!h || !h.days?.length || !h.lastSync) {
+      const setup = `<div class="empty">Noch keine Daten aus Apple Health.<br><a href="#/health" style="color:var(--accent)">Einrichten →</a></div>`;
+      fill('steps', `<div class="dcard-head"><h2>${icon('steps')}Schritte</h2></div>${setup}`);
+      fill('sleep', `<div class="dcard-head"><h2>${icon('moon')}Schlaf</h2></div>${setup}`);
+      return;
+    }
+    const d = h.days[h.days.length - 1];
+    const steps = d.step_count || 0;
+    const items = weekStepItems(h, 7);
+    const hits = items.filter((i) => i.hit).length;
+    fill('steps', `<div class="dcard-head"><h2>${icon('steps')}Schritte</h2>${link('#/health', 'Details')}</div>
+      <div class="steps-main">${ringSvg(steps, h.goal, 116, 12, steps >= h.goal ? 'var(--ok)' : 'var(--accent)')}
+        <div><div class="big-num">${fmtNum(steps)}</div><div class="muted">von ${fmtNum(h.goal)} · ${Math.round((steps / h.goal) * 100)}%</div>
+        <div class="muted">${steps >= h.goal ? '🎉 Ziel erreicht' : `noch ${fmtNum(h.goal - steps)}`}</div></div></div>
+      ${barsSvg(items, { goal: h.goal, height: 90 })}
+      <div class="muted center">${hits} von 7 Tagen Ziel geschafft</div>`);
+    const nights = h.days.slice(-7).filter((x) => x.sleep?.hours);
+    const last = [...h.days].reverse().find((x) => x.sleep?.hours);
+    const avg = nights.length ? nights.reduce((n, x) => n + x.sleep.hours, 0) / nights.length : null;
+    const ph = last?.sleep || {};
+    const tot = (ph.deep || 0) + (ph.core || 0) + (ph.rem || 0) + (ph.awake || 0);
+    const seg = (v, c, l) => (v ? `<span style="flex:${v};background:${c}" title="${l} ${fmtHours(v)}"></span>` : '');
+    fill('sleep', `<div class="dcard-head"><h2>${icon('moon')}Schlaf</h2>${link('#/health', 'Details')}</div>
+      ${last ? `<div class="big-num">${fmtHours(last.sleep.hours)}</div>
+      <div class="muted">${last.date === t ? 'letzte Nacht' : relDate(last.date, t)}${ph.start ? ` · ${timeOfTs(ph.start)}–${timeOfTs(ph.end)}` : ''}</div>
+      ${tot ? `<div class="phases">${seg(ph.deep, '#4338ca', 'Tief')}${seg(ph.core, '#6366f1', 'Kern')}${seg(ph.rem, '#a5b4fc', 'REM')}${seg(ph.awake, '#f59e0b', 'Wach')}</div>
+      <div class="legend"><span><i style="background:#4338ca"></i>Tief ${fmtHours(ph.deep)}</span><span><i style="background:#6366f1"></i>Kern ${fmtHours(ph.core)}</span><span><i style="background:#a5b4fc"></i>REM ${fmtHours(ph.rem)}</span></div>` : ''}
+      <div class="muted">Ø 7 Nächte: ${fmtHours(avg)}</div>` : '<div class="empty">Keine Schlafdaten.</div>'}`);
+  };
+  drawHealth(healthCache);
+  loadHealth().then((h) => { if (S.route.name === 'dashboard') drawHealth(h); });
+
+  // completions
+  const drawDone = (st) => {
+    if (!st) { fill('done', `<div class="dcard-head"><h2>${icon('done')}Erledigt</h2></div><div class="empty">Lädt …</div>`); return; }
+    const items = Object.entries(st.counts).map(([d, n]) => ({ label: WD_SHORT[isoWeekday(d)], value: n, title: d }));
+    const sum = items.reduce((n, i) => n + i.value, 0);
+    fill('done', `<div class="dcard-head"><h2>${icon('done')}Erledigt</h2><span class="meta">7 Tage · ${sum}</span></div>
+      ${barsSvg(items, { height: 100, color: 'var(--ok)', fmt: (v) => String(v) })}<div class="muted center">Ø ${(sum / 7).toFixed(1).replace('.', ',')} pro Tag</div>`);
+  };
+  drawDone(doneStats);
+  loadDoneStats().then((st) => { if (S.route.name === 'dashboard') drawDone(st); });
+}
+
+// ---------------------------------------------------------------- health view
+async function viewHealth() {
+  setTitle('Gesundheit', 'Daten aus Apple Health');
+  const draw = (h) => {
+    if (S.route.name !== 'health') return;
+    const has = h && h.lastSync;
+    let html = '';
+    if (has) {
+      const days = h.days;
+      const d = days[days.length - 1];
+      const last14 = days.slice(-14);
+      const stepItems = last14.map((x) => ({ label: String(+x.date.slice(8, 10)), value: x.step_count || 0, hit: (x.step_count || 0) >= h.goal, title: x.date }));
+      const hits7 = days.slice(-7).filter((x) => (x.step_count || 0) >= h.goal).length;
+      const hits30 = days.filter((x) => (x.step_count || 0) >= h.goal).length;
+      const avg7 = days.slice(-7).reduce((n, x) => n + (x.step_count || 0), 0) / 7;
+      const sleepItems = last14.map((x) => ({ label: String(+x.date.slice(8, 10)), value: x.sleep?.hours || 0, hit: (x.sleep?.hours || 0) >= 7, title: x.date }));
+      const latest = (m) => { for (let i = days.length - 1; i >= 0; i--) if (days[i][m] != null) return { v: days[i][m], date: days[i].date }; return null; };
+      const extras = [['active_energy', 'Aktive Energie', (v) => fmtNum(v) + ' kcal'], ['apple_exercise_time', 'Trainingsminuten', (v) => fmtNum(v) + ' Min.'], ['walking_running_distance', 'Strecke', (v) => v.toFixed(1).replace('.', ',') + ' km'], ['resting_heart_rate', 'Ruhepuls', (v) => fmtNum(v) + ' bpm'], ['heart_rate_variability', 'HRV', (v) => fmtNum(v) + ' ms'], ['weight_body_mass', 'Gewicht', (v) => v.toFixed(1).replace('.', ',') + ' kg']]
+        .map(([m, l, f]) => { const x = latest(m); return x ? `<div class="metric"><div class="muted">${l}</div><div class="metric-v">${f(x.v)}</div><div class="muted small">${x.date === h.today ? 'heute' : relDate(x.date, h.today)}</div></div>` : ''; }).join('');
+      html += `<div class="dash">
+        <section class="dcard"><div class="dcard-head"><h2>${icon('steps')}Schritte heute</h2></div>
+          <div class="steps-main">${ringSvg(d.step_count || 0, h.goal, 130, 13, (d.step_count || 0) >= h.goal ? 'var(--ok)' : 'var(--accent)')}<div><div class="big-num">${fmtNum(d.step_count || 0)}</div><div class="muted">Ziel ${fmtNum(h.goal)}</div></div></div>
+          <div class="row-goal"><label>Tagesziel</label><input type="number" min="1000" step="500" value="${h.goal}" data-setting="step_goal" inputmode="numeric"></div></section>
+        <section class="dcard"><div class="dcard-head"><h2>${icon('bars')}Schritte · 14 Tage</h2></div>${barsSvg(stepItems, { goal: h.goal, height: 140 })}
+          <div class="kpis"><div><b>${hits7}/7</b><span>Tage Ziel (Woche)</span></div><div><b>${hits30}/30</b><span>Tage Ziel (Monat)</span></div><div><b>${fmtNum(avg7)}</b><span>Ø pro Tag (7)</span></div></div></section>
+        <section class="dcard"><div class="dcard-head"><h2>${icon('moon')}Schlaf · 14 Nächte</h2></div>${barsSvg(sleepItems, { height: 140, color: '#6366f1', hitColor: '#4338ca', fmt: fmtHours })}
+          <div class="muted center">dunkel = mind. 7 Std.</div></section>
+        ${extras ? `<section class="dcard"><div class="dcard-head"><h2>${icon('heart')}Weitere Werte</h2></div><div class="metrics">${extras}</div></section>` : ''}
+      </div>
+      <p class="muted center small">Zuletzt synchronisiert: ${fmtSync(h.lastSync)}</p>`;
+    } else {
+      html += `<div class="panel" style="padding:18px 20px"><h2 style="margin:0 0 6px;font-size:17px">Noch keine Daten</h2><p class="muted">Richte „Health Auto Export“ auf dem iPhone ein (Anleitung unten). Danach erscheinen hier Schritte, Schlaf und mehr.</p></div>`;
+    }
+    html += `<details class="panel setup" ${has ? '' : 'open'}><summary>Einrichtung: Health Auto Export</summary>
+      <ol>
+        <li>App <b>„Health Auto Export – JSON+CSV“</b> aus dem App Store laden, öffnen und Zugriff auf Apple Health erlauben (alles erlauben).</li>
+        <li>Premium aktivieren (7 Tage gratis testen, danach z. B. Jahresabo).</li>
+        <li>Unten im Menü <b>Automations</b> → <b>+</b> (neue Automation) → Typ <b>REST API</b>.</li>
+        <li><b>URL:</b> die Adresse unten einfügen (enthält deinen geheimen Schlüssel).</li>
+        <li><b>Data Type:</b> Health Metrics · <b>Format:</b> JSON · <b>Version:</b> v2.</li>
+        <li><b>Metriken auswählen:</b> Step Count, Sleep Analysis, Active Energy, Apple Exercise Time, Walking + Running Distance, Resting Heart Rate, Heart Rate Variability, Weight.</li>
+        <li><b>Date Range:</b> „Since last sync“ bzw. „Today“ · <b>Aggregation / Time Grouping:</b> <b>Days</b> (wichtig!) · Sleep: „Aggregate Sleep“ an.</li>
+        <li><b>Sync Cadence:</b> so oft wie möglich (z. B. alle 15–30 Min.). Automation aktivieren und einmal <b>„Manual Export“</b> antippen.</li>
+      </ol>
+      <div class="row"><span class="code" id="health-url">…</span><button class="btn sm" data-act="copy-health">${icon('copy')}Kopieren</button><button class="btn sm ghost" data-act="new-health-token">Neu erzeugen</button></div>
+      <p class="muted small">iOS lässt Apps im Hintergrund nur begrenzt laufen. Die Daten kommen daher etwa alle 15–60 Min. und spätestens, wenn du Health Auto Export kurz öffnest. Fehlende Werte werden beim nächsten Mal nachgeholt.</p>
+    </details>`;
+    $('#content').innerHTML = html;
+    api('/health-token').then((x) => { if ($('#health-url')) $('#health-url').textContent = x.url; }).catch(() => {});
+  };
+  draw(healthCache);
+  draw(await loadHealth(true));
+}
+
 // ---------------------------------------------------------------- settings
+function renderDashSettings() {
+  const box = $('#dash-settings');
+  if (!box) return;
+  const cfg = dashConfig();
+  box.innerHTML = cfg.order.map((k, i) => `<div class="dash-set-row${cfg.hidden[k] ? ' off' : ''}">
+    <label class="dlg-check" style="padding:0;flex:1"><input type="checkbox" ${cfg.hidden[k] ? '' : 'checked'} data-act="dash-toggle" data-card="${k}"><span><b>${esc(DASH_CARDS[k])}</b></span></label>
+    <button class="icon-btn sm" data-act="dash-up" data-card="${k}" ${i === 0 ? 'disabled' : ''} aria-label="Nach oben"><svg viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></button>
+    <button class="icon-btn sm" data-act="dash-down" data-card="${k}" ${i === cfg.order.length - 1 ? 'disabled' : ''} aria-label="Nach unten"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+  </div>`).join('');
+}
+
 async function viewSettings() {
   setTitle('Einstellungen');
   const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -887,10 +1116,17 @@ async function viewSettings() {
     </div>
 
     <div class="panel">
+      <h2>Übersicht anpassen</h2>
+      <p>Welche Kacheln die Startseite zeigt und in welcher Reihenfolge. Gilt nur für <b>dieses Gerät</b> (${window.innerWidth <= 860 ? 'Handy-Ansicht' : 'große Ansicht'}).</p>
+      <div id="dash-settings"></div>
+    </div>
+
+    <div class="panel">
       <h2>Konto</h2>
       <div class="row"><span>${esc(S.email)}</span><a class="btn sm" href="/auth/logout">Abmelden</a></div>
     </div>
   </div>`;
+  renderDashSettings();
   api('/location-token').then((d) => {
     if (!$('#hook-url')) return;
     $('#hook-url').textContent = d.url;
@@ -938,6 +1174,20 @@ async function settingsAction(act, el) {
     if (!S.places.find((x) => x.id === p.id)) S.places.push(p);
     S.places.sort((a, b) => a.name.localeCompare(b.name, 'de'));
     viewSettings();
+  } else if (act === 'copy-health') {
+    copy($('#health-url').textContent);
+  } else if (act === 'new-health-token') {
+    if (!confirm('Neuen Schlüssel erzeugen? Die URL in Health Auto Export muss dann angepasst werden.')) return;
+    const d = await api('/health-token', { method: 'POST' });
+    $('#health-url').textContent = d.url;
+  } else if (act === 'dash-up' || act === 'dash-down' || act === 'dash-toggle') {
+    const cfg = dashConfig();
+    const k = el.dataset.card;
+    const i = cfg.order.indexOf(k);
+    if (act === 'dash-toggle') { if (cfg.hidden[k]) delete cfg.hidden[k]; else cfg.hidden[k] = 1; }
+    else { const j = act === 'dash-up' ? i - 1 : i + 1; if (j >= 0 && j < cfg.order.length) [cfg.order[i], cfg.order[j]] = [cfg.order[j], cfg.order[i]]; }
+    store.set(cfg.key, { order: cfg.order, hidden: cfg.hidden });
+    renderDashSettings();
   } else if (act === 'copy-token') {
     copy($('#hook-token').textContent);
   } else if (act === 'new-token') {
@@ -1085,7 +1335,7 @@ function closeDrawer(back = true) {
   }
 }
 function routeHash(r) {
-  if (!r || r.name === 'today') return '#/today';
+  if (!r || r.name === 'dashboard') return '#/dashboard';
   return '#/' + r.name + (r.arg ? '/' + encodeURIComponent(r.arg) : '');
 }
 
@@ -1580,6 +1830,7 @@ function bindGlobal() {
     if (!k) return;
     try {
       S.settings = await api('/settings', { method: 'PATCH', body: { [k]: e.target.value } });
+      if (k === 'step_goal' && healthCache) { healthCache.goal = +S.settings.step_goal; store.set('health', healthCache); if (S.route.name === 'health') viewHealth(); }
       toast('Gespeichert');
     } catch (err) { toast(err.message); }
   });
@@ -1599,7 +1850,7 @@ function bindGlobal() {
 
 function defaultsForRoute() {
   const r = S.route;
-  if (r.name === 'today') return { due_date: S.today };
+  if (r.name === 'today' || r.name === 'dashboard') return { due_date: S.today };
   if (r.name === 'project') return { project_id: r.arg };
   if (r.name === 'label') return { labels: [r.arg] };
   return {};
