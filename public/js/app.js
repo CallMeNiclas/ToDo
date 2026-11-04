@@ -1856,4 +1856,13 @@ function defaultsForRoute() {
   return {};
 }
 
+// iOS Safari ignores user-scalable=no in some cases: block pinch gestures explicitly
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTouchEnd < 300 && !e.target.closest('input, textarea, select, button, a, [data-task], [data-check]')) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+
 boot();

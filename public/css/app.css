@@ -689,3 +689,12 @@ details.setup li { margin: 6px 0; }
 .blbl { font-size: 11px; color: var(--muted); height: 20px; line-height: 20px; font-variant-numeric: tabular-nums; }
 .bgoal { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--p2); pointer-events: none; }
 @media (pointer: coarse) { .blbl { font-size: 12.5px; } }
+
+/* ---------- no pinch / double-tap zoom, no sideways scrolling ---------- */
+html { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { overflow-x: hidden; }
+.main, .content { min-width: 0; overflow-x: clip; }
+@media (max-width: 1100px) { .grid-today { grid-template-columns: minmax(0, 1fr); } }
+.grid-today > * { min-width: 0; }
+.section-title { flex-wrap: wrap; gap: 4px 8px; }
+.section-title .btn { margin-left: auto; }
