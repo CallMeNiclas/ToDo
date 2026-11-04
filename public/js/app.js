@@ -212,7 +212,12 @@ function renderSync() {
 const open = () => S.tasks;
 const byId = (id) => S.tasks.find((t) => t.id === id);
 const project = (id) => S.projects.find((p) => p.id === id);
-const childProjects = (id) => S.projects.filter((p) => p.id !== 'inbox' && (p.parent_id || null) === id);
+const byName = (a, b) => a.name.localeCompare(b.name, 'de', { numeric: true, sensitivity: 'base' });
+const childProjects = (id) => S.projects.filter((p) => p.id !== 'inbox' && (p.parent_id || null) === id).sort(byName);
+function mainOptions(selected, excludeId) {
+  const mains = S.projects.filter((p) => p.is_main && p.id !== excludeId).sort(byName);
+  return `<option value="">– keinem –</option>` + mains.map((p) => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+}
 /** [{p, depth}] in tree order (without inbox) */
 function projectTree(exclude) {
   const out = [];
@@ -403,7 +408,7 @@ function renderNav() {
     const toggle = hasKids
       ? `<button class="tree-toggle${collapsed[p.id] ? '' : ' open'}" data-toggle-project="${p.id}" aria-label="${collapsed[p.id] ? 'Aufklappen' : 'Zuklappen'}">${icon('right')}</button>`
       : '<span class="tree-toggle-space"></span>';
-    return `<a href="#/project/${p.id}" class="nav-item${active('project', p.id)}" style="padding-left:${4 + depth * 18}px">${toggle}<span class="dot" style="background:${esc(p.color)}"></span><span class="nav-name">${esc(p.name)}</span><span class="count">${n || ''}</span><button class="icon-btn sm nav-edit" data-edit-project="${p.id}" aria-label="Projekt bearbeiten">${icon('more')}</button></a>`;
+    return `<a href="#/project/${p.id}" class="nav-item${active('project', p.id)}" style="padding-left:${4 + depth * 18}px">${toggle}<span class="dot" style="background:${esc(p.color)}"></span><span class="nav-name${p.is_main ? ' main' : ''}">${esc(p.name)}</span><span class="count">${n || ''}</span><button class="icon-btn sm nav-edit" data-edit-project="${p.id}" aria-label="Projekt bearbeiten">${icon('more')}</button></a>`;
   }).join('') || '<div class="nav-item" style="color:var(--faint);cursor:default">Noch keine Projekte</div>';
 
   const labels = allLabels();
@@ -716,7 +721,7 @@ function viewProject(id) {
   const nTop = all.filter((t) => !t.parent_id).length;
   setTitle(p.name, `${parentPath ? parentPath + ' › ' : ''}${nTop} offene Aufgaben${kids.length ? ' inkl. Unterprojekte' : ''}${mins ? ' · ' + fmtShort(mins) : ''}`);
   if (id !== 'inbox') {
-    $('#top-actions').innerHTML = `<button class="btn sm ghost" data-new-subproject="${id}">${icon('plus')}<span class="hide-narrow">Unterprojekt</span></button><button class="icon-btn" data-edit-project="${id}" aria-label="Projekt bearbeiten">${icon('more')}</button>`;
+    $('#top-actions').innerHTML = `${p.is_main ? `<button class="btn sm ghost" data-new-subproject="${id}">${icon('plus')}<span class="hide-narrow">Unterprojekt</span></button>` : ''}<button class="icon-btn" data-edit-project="${id}" aria-label="Projekt bearbeiten">${icon('more')}</button>`;
   }
   let html = `<div class="panel"><div class="section">${own.length ? nestedList(own, { showProject: false }) : kids.length ? '' : emptyHtml(id === 'inbox' ? '📥' : '✨', id === 'inbox' ? 'Eingang ist leer.' : 'Keine offenen Aufgaben.')}${addInline({ project_id: id })}</div></div>`;
   for (const k of kids) {
@@ -1359,13 +1364,20 @@ function dialog({ title, fields, ok = 'OK', danger }) {
     const wrap = document.createElement('div');
     wrap.className = 'modal open';
     wrap.innerHTML = `<form class="qa-card" style="max-width:420px"><div style="font-weight:650;font-size:16px;padding:4px 6px 10px">${esc(title)}</div>
-      ${fields.map((f) => f.type === 'select' ? `<label style="display:block;padding:4px 6px 10px"><div style="font-size:13px;color:var(--muted);margin-bottom:4px">${esc(f.label)}</div><select name="${f.name}" style="width:100%;font-size:15px;padding:9px 11px">${f.options}</select></label>`
+      ${fields.map((f) => f.type === 'checkbox' ? `<label class="dlg-check"><input type="checkbox" name="${f.name}" ${f.checked ? 'checked' : ''} ${f.toggles ? `data-toggles="${f.toggles}"` : ''}><span><b>${esc(f.label)}</b>${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</span></label>`
+        : f.type === 'select' ? `<label class="dlg-field" data-field="${f.name}" style="display:block;padding:4px 6px 10px"><div style="font-size:13px;color:var(--muted);margin-bottom:4px">${esc(f.label)}</div><select name="${f.name}" style="width:100%;font-size:15px;padding:9px 11px">${f.options}</select></label>`
         : f.type === 'color' ? `<div style="padding:4px 6px 10px"><div style="font-size:13px;color:var(--muted);margin-bottom:6px">${esc(f.label)}</div><div class="days-pick" style="flex-wrap:wrap;gap:6px">${COLORS.map((c) => `<button type="button" data-color="${c}" style="width:28px;height:28px;border-radius:50%;background:${c};border:3px solid ${c === f.value ? 'var(--fg)' : 'transparent'}"></button>`).join('')}</div><input type="hidden" name="${f.name}" value="${esc(f.value || COLORS[0])}"></div>`
         : `<label style="display:block;padding:4px 6px 10px">${f.label ? `<div style="font-size:13px;color:var(--muted);margin-bottom:4px">${esc(f.label)}</div>` : ''}<input name="${f.name}" type="${f.type || 'text'}" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder || '')}" style="width:100%;border:1px solid var(--line);font-size:15px;padding:9px 11px"></label>`).join('')}
       <div class="qa-foot">${danger ? `<button type="button" class="btn danger" data-danger>${esc(danger)}</button>` : ''}<div class="qa-btns"><button type="button" class="btn" data-cancel>Abbrechen</button><button class="btn primary">${esc(ok)}</button></div></div></form>`;
     document.body.appendChild(wrap);
     const form = wrap.querySelector('form');
     const done = (v) => { wrap.remove(); resolve(v); };
+    const syncToggles = () => form.querySelectorAll('[data-toggles]').forEach((cb) => {
+      const target = form.querySelector(`[data-field="${cb.dataset.toggles}"]`);
+      if (target) target.hidden = cb.checked;
+    });
+    form.addEventListener('change', syncToggles);
+    syncToggles();
     form.addEventListener('submit', (e) => { e.preventDefault(); done(Object.fromEntries(new FormData(form))); });
     wrap.addEventListener('click', (e) => {
       if (e.target === wrap || e.target.closest('[data-cancel]')) done(null);
@@ -1391,19 +1403,21 @@ function toast(msg, actionLabel, action) {
   if (actionLabel) el.querySelector('button').addEventListener('click', () => { clearTimeout(t); el.remove(); action(); });
 }
 
+function projectFields(p, parentId) {
+  const hasKids = p ? childProjects(p.id).length > 0 : false;
+  return [
+    { name: 'name', label: 'Name', value: p ? p.name : '', placeholder: 'z. B. Fundus7' },
+    { name: 'is_main', type: 'checkbox', label: 'Hauptprojekt', hint: 'Kann Unterprojekte enthalten', checked: p ? !!p.is_main : false, toggles: 'parent_id' },
+    ...(hasKids ? [] : [{ name: 'parent_id', label: 'Einem Hauptprojekt zuordnen', type: 'select', options: mainOptions(p ? p.parent_id : parentId, p?.id) }]),
+    { name: 'color', label: 'Farbe', type: 'color', value: p ? p.color : parentId ? project(parentId)?.color : COLORS[S.projects.length % COLORS.length] },
+  ];
+}
+
 async function editProject(id) {
   if (offlineBlocked()) return;
   const p = project(id);
   const sub = subtree(id);
-  const r = await dialog({
-    title: 'Projekt bearbeiten',
-    fields: [
-      { name: 'name', label: 'Name', value: p.name },
-      { name: 'parent_id', label: 'Übergeordnetes Projekt', type: 'select', options: projectOptions(p.parent_id || '', { exclude: sub, none: '– keins (Hauptprojekt) –' }) },
-      { name: 'color', label: 'Farbe', type: 'color', value: p.color },
-    ],
-    ok: 'Speichern', danger: 'Löschen',
-  });
+  const r = await dialog({ title: 'Projekt bearbeiten', fields: projectFields(p), ok: 'Speichern', danger: 'Löschen' });
   if (!r) return;
   if (r.__danger) {
     const n = open().filter((t) => sub.has(t.project_id)).length;
@@ -1415,9 +1429,16 @@ async function editProject(id) {
     if (S.route.name === 'project') go(p.parent_id ? '#/project/' + p.parent_id : '#/today'); else render();
     return;
   }
+  const isMain = r.is_main === 'on';
+  const kids = childProjects(id);
+  if (p.is_main && !isMain && kids.length && !confirm(`„${p.name}“ ist dann kein Hauptprojekt mehr. Die ${kids.length} Unterprojekt(e) werden zu normalen Projekten. Fortfahren?`)) return;
   try {
-    const u = await api('/projects/' + id, { method: 'PATCH', body: { name: r.name, color: r.color, parent_id: r.parent_id || null } });
+    const body = { name: r.name, color: r.color, is_main: isMain };
+    if ('parent_id' in r) body.parent_id = isMain ? null : r.parent_id || null;
+    const u = await api('/projects/' + id, { method: 'PATCH', body });
     Object.assign(p, u);
+    if (!isMain) for (const k of kids) k.parent_id = null;
+    if (u.parent_id) { delete collapsed[u.parent_id]; store.set('collapsed', collapsed); }
     render();
   } catch (e) { toast(e.message); }
 }
@@ -1425,18 +1446,11 @@ async function editProject(id) {
 async function newProject(parentId = '') {
   if (offlineBlocked()) return;
   const parent = parentId ? project(parentId) : null;
-  const r = await dialog({
-    title: parent ? `Neues Unterprojekt in „${parent.name}“` : 'Neues Projekt',
-    fields: [
-      { name: 'name', label: 'Name', placeholder: parent ? 'z. B. To-Do’s' : 'z. B. Fundus7' },
-      { name: 'parent_id', label: 'Übergeordnetes Projekt', type: 'select', options: projectOptions(parentId, { none: '– keins (Hauptprojekt) –' }) },
-      { name: 'color', label: 'Farbe', type: 'color', value: parent ? parent.color : COLORS[S.projects.length % COLORS.length] },
-    ],
-    ok: 'Anlegen',
-  });
+  const r = await dialog({ title: parent ? `Neues Unterprojekt in „${parent.name}“` : 'Neues Projekt', fields: projectFields(null, parentId), ok: 'Anlegen' });
   if (!r?.name?.trim()) return;
+  const isMain = r.is_main === 'on';
   try {
-    const p = await api('/projects', { method: 'POST', body: { ...r, parent_id: r.parent_id || null } });
+    const p = await api('/projects', { method: 'POST', body: { name: r.name, color: r.color, is_main: isMain, parent_id: isMain ? null : r.parent_id || null } });
     S.projects.push(p);
     if (p.parent_id) { delete collapsed[p.parent_id]; store.set('collapsed', collapsed); }
     go('#/project/' + p.id);

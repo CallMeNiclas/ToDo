@@ -126,7 +126,7 @@ const TOOLS = [
   },
   {
     name: 'manage_project',
-    description: 'Projekt anlegen, umbenennen/umfärben/verschieben (mit id) oder löschen (action=delete, löscht auch Unterprojekte und alle Aufgaben darin). Unterprojekte: parent = übergeordnetes Projekt (ID, Name oder Pfad).',
+    description: 'Projekt anlegen, umbenennen/umfärben/zuordnen (mit id) oder löschen (action=delete, löscht auch Unterprojekte und alle Aufgaben darin). Struktur: Hauptprojekte (is_main) enthalten Unterprojekte, eine Ebene tief. Zuordnen: parent = Hauptprojekt.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -134,7 +134,8 @@ const TOOLS = [
         id: { type: 'string' },
         name: { type: 'string' },
         color: { type: 'string', description: 'Hex, z. B. #10b981' },
-        parent: { type: ['string', 'null'], description: 'Übergeordnetes Projekt (ID, Name oder Pfad "Fundus7"). null = Hauptprojekt.' },
+        parent: { type: ['string', 'null'], description: 'Hauptprojekt, dem das Projekt untergeordnet wird (ID oder Name, z. B. "Fundus7"). Wird bei Bedarf automatisch zum Hauptprojekt. null = keinem zugeordnet.' },
+        is_main: { type: 'boolean', description: 'Als Hauptprojekt markieren (kann dann Unterprojekte haben). false = Unterprojekte werden zu normalen Projekten.' },
       },
       required: ['action'],
     },
@@ -368,16 +369,16 @@ async function callTool(env, name, a = {}) {
       const { results } = await env.DB.prepare('SELECT project_id, COUNT(*) AS n FROM tasks WHERE completed_at IS NULL GROUP BY project_id').all();
       return {
         projects: c.projects.map((p) => ({
-          id: p.id, name: p.name, path: projectPath(c, p.id), parent_id: p.parent_id || null, color: p.color,
+          id: p.id, name: p.name, path: projectPath(c, p.id), is_main: !!p.is_main, parent_id: p.parent_id || null, color: p.color,
           open_tasks: results.find((r) => r.project_id === p.id)?.n || 0,
         })),
       };
     }
     case 'manage_project': {
       const parent = a.parent === undefined ? undefined : a.parent ? resolveProject(c, a.parent) : null;
-      if (a.action === 'create') return T.createProject(env, { name: a.name, color: a.color, parent_id: parent });
+      if (a.action === 'create') return T.createProject(env, { name: a.name, color: a.color, parent_id: parent, is_main: a.is_main }, { promote: true });
       const id = resolveProject(c, a.id || a.name);
-      if (a.action === 'update') return T.updateProject(env, id, { name: a.id ? a.name : undefined, color: a.color, parent_id: parent });
+      if (a.action === 'update') return T.updateProject(env, id, { name: a.id ? a.name : undefined, color: a.color, parent_id: parent, is_main: a.is_main }, { promote: true });
       if (a.action === 'delete') return T.deleteProject(env, id);
       throw new T.InputError('Unbekannte action');
     }
