@@ -440,7 +440,10 @@ function emptyHtml(emoji, text) {
 function viewToday() {
   const t = S.today;
   const c = counts();
-  setTitle('Heute', fmtLongDate(t) + (c.mins ? ` · ${fmtMins(c.mins)} geplant` : ''));
+  const narrow = window.innerWidth <= 860;
+  const [, mm, dd] = t.split('-').map(Number);
+  const dateLabel = narrow ? `${WD_SHORT[isoWeekday(t)]}., ${dd}. ${MONTHS[mm - 1].slice(0, 3)}.` : fmtLongDate(t);
+  setTitle('Heute', dateLabel + (c.mins ? ` · ${narrow ? fmtShort(c.mins) : fmtMins(c.mins) + ' geplant'}` : ''));
   const overdue = sortTasks(open().filter((x) => x.due_date && x.due_date < t));
   const today = sortTasks(open().filter((x) => x.due_date === t));
   const timed = today.filter((x) => x.due_time);

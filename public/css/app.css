@@ -500,3 +500,74 @@ mark { background: color-mix(in srgb, var(--p2) 30%, transparent); color: inheri
 @media (pointer: coarse) and (max-width: 860px) {
   .d-grid { grid-template-columns: 128px 1fr; }
 }
+
+/* ---------- touch: one more step larger ---------- */
+@media (pointer: coarse) {
+  body { font-size: 17px; }
+  .icon-btn { width: 50px; height: 50px; }
+  .icon-btn svg { width: 26px; height: 26px; }
+  .icon-btn.sm { width: 42px; height: 42px; }
+  .btn { padding: 13px 20px; font-size: 17px; }
+  .btn.sm { padding: 10px 16px; font-size: 16px; }
+  .sync { padding: 10px 15px; font-size: 15px; }
+  .titles h1 { font-size: 27px; }
+  .titles .sub { font-size: 15px; }
+
+  .nav-item { padding: 13px 12px; font-size: 17.5px; }
+  .nav-item svg { width: 23px; height: 23px; }
+  .nav-head { font-size: 13px; }
+
+  .task { padding: 15px 16px; gap: 15px; }
+  .task .check { width: 29px; height: 29px; }
+  .task .check svg { width: 16px; height: 16px; }
+  .t-title { font-size: 18px; }
+  .t-notes { font-size: 15px; }
+  .t-meta { font-size: 14.5px; }
+  .t-meta svg { width: 16px; height: 16px; }
+  .add-inline { font-size: 17px; padding: 16px; }
+  .section-title { font-size: 15.5px; }
+  .stat .num { font-size: 30px; }
+  .stat .lbl { font-size: 14.5px; }
+  .panel-head h2 { font-size: 17px; }
+
+  .wtask { font-size: 15.5px; padding: 10px 8px; }
+  .wtask .check { width: 24px; height: 24px; }
+  .ev { font-size: 14.5px; }
+  .chip { font-size: 14.5px; padding: 5px 11px; }
+  .block { font-size: 14.5px; }
+  .hour span { font-size: 12.5px; }
+
+  .d-title { font-size: 23px; }
+  .d-notes { font-size: 16.5px; }
+  .d-grid > label { font-size: 16px; }
+  .d-grid input, .d-grid select { min-height: 50px; font-size: 17px !important; }
+  .prio-pick button { width: 56px; height: 50px; }
+  .prio-pick svg { width: 22px; height: 22px; }
+  .days-pick button { width: 44px; height: 44px; font-size: 15px; }
+  .pill { font-size: 16px; }
+  .pill button { width: 30px; height: 30px; }
+  .d-section-title { font-size: 15px; }
+  .d-title-row .check { width: 32px; height: 32px; }
+
+  .qa-card input { font-size: 19px !important; }
+  .qa-card textarea { font-size: 16.5px !important; }
+  .qa-mic { width: 54px; height: 54px; }
+  .qa-foot .hint { font-size: 13.5px; }
+  .search-big input { font-size: 19px !important; padding: 17px 0; }
+  .toast { font-size: 16px; padding: 13px 16px; }
+  .settings h2 { font-size: 18px; }
+  .settings p, .settings ol { font-size: 15.5px; }
+}
+@media (pointer: coarse) and (max-width: 860px) {
+  .d-grid { grid-template-columns: 136px 1fr; }
+  .tabbar a { font-size: 12.5px; }
+  .tabbar a svg { width: 29px; height: 29px; }
+  .fab { width: 66px; height: 66px; border-radius: 22px; }
+  .fab svg { width: 32px; height: 32px; }
+  .stat .num { font-size: 28px; }
+}
+@media (pointer: coarse) and (max-width: 860px) {
+  .titles .sub { font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prio-pick { gap: 6px; }
+  .prio-pick button { width: 50px; }
+}
