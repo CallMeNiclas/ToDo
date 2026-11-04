@@ -92,6 +92,21 @@ async function gfetch(env, url, init = {}) {
   return res.json();
 }
 
+// Event colours as shown in the current Google Calendar UI (colorId -> hex)
+const EVENT_COLORS = {
+  1: '#7986cb', // Lavendel
+  2: '#33b679', // Salbei
+  3: '#8e24aa', // Weintraube
+  4: '#e67c73', // Flamingo
+  5: '#f6bf26', // Banane
+  6: '#f4511e', // Mandarine
+  7: '#039be5', // Pfau
+  8: '#616161', // Graphit
+  9: '#3f51b5', // Blaubeere
+  10: '#0b8043', // Basilikum
+  11: '#d50000', // Tomate
+};
+
 /**
  * Events from all calendars that are switched on in Google Calendar.
  * from/to: ISO instants. Returns [{id,title,start,end,allDay,color,calendar,location,url}]
@@ -112,7 +127,7 @@ export async function listEvents(env, fromIso, toIso) {
           allDay: !!e.start.date,
           start: e.start.dateTime || e.start.date,
           end: e.end.dateTime || e.end.date,
-          color: cal.backgroundColor || '#4285f4',
+          color: EVENT_COLORS[e.colorId] || cal.backgroundColor || '#039be5',
           calendar: cal.summaryOverride || cal.summary,
           location: e.location || '',
           url: e.htmlLink,

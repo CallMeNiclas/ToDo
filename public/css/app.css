@@ -20,6 +20,7 @@
   --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 4px 16px rgba(15, 23, 42, .06);
   --shadow-lg: 0 12px 48px rgba(15, 23, 42, .18);
   --radius: 14px;
+  --tint: 16%;
   --sidebar: 252px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color-scheme: light;
@@ -46,6 +47,7 @@
     --p4: #5d6678;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
     --shadow-lg: 0 12px 48px rgba(0, 0, 0, .6);
+    --tint: 30%;
     color-scheme: dark;
   }
 }
@@ -227,7 +229,7 @@ textarea { resize: vertical; }
 .hour span { position: absolute; top: -8px; left: 0; width: 36px; text-align: right; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; background: var(--surface); }
 .block {
   position: absolute; border-radius: 8px; padding: 4px 8px; font-size: 12.5px; overflow: hidden; line-height: 1.3;
-  border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 16%, var(--surface)); color: var(--fg);
+  border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) var(--tint), var(--surface)); color: var(--fg);
   cursor: pointer;
 }
 .block.task-block { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--c) 10%, var(--surface)) 0 6px, color-mix(in srgb, var(--c) 16%, var(--surface)) 6px 12px); border-left-style: solid; }
@@ -250,7 +252,7 @@ textarea { resize: vertical; }
 .is-today .day-head .dn { color: var(--accent); }
 .day-head .load { font-size: 11.5px; color: var(--muted); text-align: right; }
 .day-body { padding: 6px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.ev { font-size: 12px; padding: 4px 7px; border-radius: 7px; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 13%, var(--surface)); overflow: hidden; cursor: pointer; }
+.ev { font-size: 12px; padding: 4px 7px; border-radius: 7px; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) var(--tint), var(--surface)); overflow: hidden; cursor: pointer; }
 .ev b { font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ev small { color: var(--muted); }
 .wtask { display: flex; gap: 7px; align-items: flex-start; font-size: 12.5px; padding: 5px 6px; border-radius: 7px; cursor: pointer; line-height: 1.3; }
