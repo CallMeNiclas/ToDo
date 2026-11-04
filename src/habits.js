@@ -39,7 +39,7 @@ export async function habits(env, { days = 84 } = {}) {
   const tz = env.TIMEZONE;
   const today = localNow(tz).date;
   const from = addDays(today, -400);
-  const tasks = (await listOpenTasks(env)).filter((t) => t.recurrence && t.due_date);
+  const tasks = (await listOpenTasks(env)).filter((t) => t.habit && t.recurrence && t.due_date);
   if (!tasks.length) return { today, habits: [] };
   const { results } = await env.DB.prepare('SELECT task_id, completed_at FROM completions WHERE completed_at >= ?').bind(new Date(Date.now() - 410 * 86400000).toISOString()).all();
   const byTask = new Map();

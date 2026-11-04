@@ -32,6 +32,7 @@ const taskFields = {
     required: ['freq'],
   },
   labels: { type: 'array', items: { type: 'string' }, description: 'Labels (ersetzt die bisherigen)' },
+  habit: { type: 'boolean', description: 'Als Gewohnheit tracken (Streaks). Nur auf ausdrücklichen Wunsch, nur für wiederkehrende Aufgaben.' },
   reminders: {
     type: 'array',
     description: 'Push-Erinnerungen (ersetzt bisherige; [] = Standard). Pro Eintrag ENTWEDER {"before": Minuten} = X Min. vor due_date+due_time (braucht due_time) ODER {"at": "YYYY-MM-DDTHH:MM"} = fester Zeitpunkt (lokale Zeit Europe/Berlin, funktioniert auch ohne due_date) ODER {"time": "HH:MM"} = am Fälligkeitstag um diese Uhrzeit. Ohne eigene Erinnerungen gilt automatisch: Aufgaben mit Uhrzeit → Push 15 Min. vorher; Prio 1 ohne Uhrzeit → Push+Mail morgens am Fälligkeitstag. Prio-1-Aufgaben ohne Wiederholung bekommen zusätzlich eine Mail.',
@@ -177,7 +178,7 @@ const TOOLS = [
   },
   {
     name: 'get_habits',
-    description: 'Gewohnheiten/Streaks: für jede wiederkehrende Aufgabe aktuelle Serie, Rekord und Erfüllungsquote der letzten 30 Tage.',
+    description: 'Gewohnheiten/Streaks: für jede als Gewohnheit markierte Aufgabe aktuelle Serie, Rekord und Erfüllungsquote der letzten 30 Tage.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
   },
@@ -263,6 +264,7 @@ function view(c, t, all) {
   if (t.deadline) out.deadline = t.deadline;
   if (t.focus_sec) out.focus_minutes = Math.round(t.focus_sec / 60);
   if (t.recurrence) out.recurrence = t.recurrence;
+  if (t.habit) out.habit = true;
   if (t.labels.length) out.labels = t.labels;
   if (t.notes) out.notes = t.notes.length > 300 ? t.notes.slice(0, 300) + '…' : t.notes;
   if (t.reminders.length) out.reminders = t.reminders;

@@ -1104,7 +1104,7 @@ function viewDashboard() {
   const drawHabits = (h) => {
     const list = (h?.habits || []).filter(inScope).slice(0, 5);
     fill('habits', `<div class="dcard-head"><h2>${icon('flame')}Streaks</h2>${link('#/habits', 'Alle')}</div>
-      ${list.length ? list.map((x) => `<a class="habit-row" href="#/habits"><span class="hflame${x.current ? '' : ' cold'}">🔥 ${x.current}</span><span class="htitle">${esc(x.title)}</span><span class="hdots">${last7(x).map((v) => `<i class="d${v}"></i>`).join('')}</span></a>`).join('') : '<div class="empty">Noch keine wiederkehrenden Aufgaben.</div>'}`);
+      ${list.length ? list.map((x) => `<a class="habit-row" href="#/habits"><span class="hflame${x.current ? '' : ' cold'}">🔥 ${x.current}</span><span class="htitle">${esc(x.title)}</span><span class="hdots">${last7(x).map((v) => `<i class="d${v}"></i>`).join('')}</span></a>`).join('') : '<div class="empty">Noch keine Gewohnheiten markiert.</div>'}`);
   };
   drawHabits(habitsCache);
   loadHabits().then((h) => { if (S.route.name === 'dashboard') drawHabits(h); });
@@ -1154,7 +1154,7 @@ async function viewHabits() {
     if (S.route.name !== 'habits') return;
     if (!h) { $('#content').innerHTML = '<div class="panel"><div class="empty">Lädt …</div></div>'; return; }
     const list = (h.habits || []).filter(inScope);
-    if (!list.length) { $('#content').innerHTML = `<div class="panel">${emptyHtml('🔥', 'Noch keine wiederkehrenden Aufgaben. Sobald du welche abhakst, entstehen hier Serien.')}</div>`; return; }
+    if (!list.length) { $('#content').innerHTML = `<div class="panel">${emptyHtml('🔥', 'Noch keine Gewohnheiten. Öffne eine wiederkehrende Aufgabe und setze den Haken „Gewohnheit · Streaks tracken“.')}</div>`; return; }
     $('#content').innerHTML = `<div class="habits">${list.map((x) => {
       const p = project(x.project_id);
       return `<section class="dcard habit" data-task="${x.task_id}">
@@ -1749,6 +1749,9 @@ function renderDrawer() {
     <div class="row"><select data-f="recurrence" ${t.due_date ? '' : 'disabled title="Erst ein Datum setzen"'}>${REC_PRESETS.map(([v, l]) => `<option value="${v}" ${rp === v ? 'selected' : ''}>${l}</option>`).join('')}</select>${t.recurrence ? `<span style="font-size:12.5px;color:var(--muted)">${esc(recurrenceLabel(t.recurrence))}</span>` : ''}</div>
     ${rp === 'custom' ? `<span></span><div class="row">alle <input type="number" min="1" max="99" value="${t.recurrence.interval || 1}" data-rec="interval" style="width:62px"><select data-rec="freq">${[['day', 'Tage'], ['week', 'Wochen'], ['month', 'Monate'], ['year', 'Jahre']].map(([v, l]) => `<option value="${v}" ${t.recurrence.freq === v ? 'selected' : ''}>${l}</option>`).join('')}</select>${t.recurrence.freq === 'week' ? `<div class="days-pick">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<button class="${(t.recurrence.days || []).includes(d) ? 'on' : ''}" data-rec-day="${d}">${WD_SHORT[d]}</button>`).join('')}</div>` : ''}</div>` : ''}
 
+    ${t.recurrence ? `<label>${icon('flame')}Gewohnheit</label>
+    <div class="row"><label class="dlg-check" style="padding:0"><input type="checkbox" data-habit ${t.habit ? 'checked' : ''}><span>Streaks tracken${t.habit && S.streaks?.[t.id] ? ` · 🔥 ${S.streaks[t.id]}` : ''}</span></label></div>` : ''}
+
     <label>${icon('tag')}Labels</label>
     <div class="row">${t.labels.map((l) => `<span class="pill">@${esc(l)}<button data-del-label="${esc(l)}" aria-label="Label entfernen">${icon('x')}</button></span>`).join('')}<input class="tag-input" id="label-input" placeholder="+ Label" list="label-list"><datalist id="label-list">${labelsAll.map((l) => `<option value="${esc(l)}">`).join('')}</datalist></div>
 
@@ -1835,6 +1838,7 @@ function bindDrawer() {
     if (!t) return;
     const f = e.target.dataset.f;
     if (e.target.id === 'label-input') return addLabel(e.target.value);
+    if (e.target.matches('[data-habit]')) { await saveTask(t.id, { habit: e.target.checked }); habitsCache = null; loadHabits().then(() => refresh()); return; }
     if (e.target.id === 'add-reminder') {
       const v = e.target.value;
       if (v === '') return;

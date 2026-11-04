@@ -85,6 +85,7 @@ export function rowToTask(r) {
     reminders: JSON.parse(r.reminders || '[]'),
     deadline: r.deadline || null,
     focus_sec: r.focus_sec || 0,
+    habit: !!r.habit,
     place_id: r.place_id,
     place_event: r.place_event,
     sort: r.sort,
@@ -247,6 +248,7 @@ async function toColumns(env, input, existing) {
     c.place_event = input.place_event === 'leave' ? 'leave' : 'arrive';
   }
   if (has('sort')) c.sort = parseInt(input.sort, 10) || 0;
+  if (has('habit')) c.habit = input.habit ? 1 : 0;
   return c;
 }
 
