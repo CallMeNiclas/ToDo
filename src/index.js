@@ -74,7 +74,25 @@ ${details.redirectIsLoopback ? '<p class="warn">Der Zugang geht an ein Programm 
 }
 
 const defaultHandler = {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    try {
+      return await handleDefault(request, env, ctx);
+    } catch (e) {
+      console.error(e);
+      const msg = String(e?.message || e);
+      const hint = /no such table/i.test(msg)
+        ? 'Die Datenbank ist noch nicht eingerichtet (Migration fehlt).'
+        : /invalid_client|unauthorized_client/i.test(msg)
+          ? 'Client-ID oder Clientschlüssel stimmen nicht. Bitte in Cloudflare prüfen.'
+          : '';
+      if (new URL(request.url).pathname.startsWith('/api/')) return Response.json({ error: msg }, { status: 500 });
+      return page('Fehler', `<h1>Da ist etwas schiefgelaufen</h1>${hint ? `<p><b>${esc(hint)}</b></p>` : ''}<p>Technische Meldung:</p><pre style="white-space:pre-wrap;font-size:13px">${esc(msg)}</pre><div class="row"><a href="/"><button class="primary">Erneut versuchen</button></a></div>`, 500);
+    }
+  },
+};
+
+async function handleDefault(request, env) {
+  {
     const url = new URL(request.url);
     const p = url.pathname;
     if (p === '/authorize') return authorize(request, env);
@@ -93,8 +111,8 @@ const defaultHandler = {
       return handleApi(request, env);
     }
     return env.ASSETS.fetch(request);
-  },
-};
+  }
+}
 
 const mcpHandler = {
   async fetch(request, env, ctx) {
