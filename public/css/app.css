@@ -814,3 +814,36 @@ body[data-bg="photo"][data-view="today"] :is(.stat, .panel) { background: color-
 .hdots i.d0 { background: transparent; outline: 1.5px dashed var(--p2); opacity: 1; }
 @media (max-width: 860px) { .habits { grid-template-columns: 1fr; } }
 @media (pointer: coarse) { .hm, .hm-days span { width: 16px; height: 16px; } .hm-days span { line-height: 16px; font-size: 10px; } .htitle { font-size: 16px; } }
+
+/* ---------- dashboard as masonry columns (no gaps between cards of different height) ---------- */
+.dash.dash-flow { display: block; columns: 3 340px; column-gap: 16px; }
+.dash.dash-flow > .dcard { break-inside: avoid; -webkit-column-break-inside: avoid; display: inline-block; width: 100%; margin: 0 0 16px; }
+.dash.dash-flow > .dcard:empty { display: none; }
+.dc-stats { margin-bottom: 16px; }
+.dc-stats .stats { margin: 0; }
+.dc-today { grid-row: auto; }
+@media (max-width: 860px) { .dash.dash-flow { columns: 1; } .dash.dash-flow > .dcard { margin-bottom: 12px; } }
+
+/* ---------- tablets (iPad): less crowding ---------- */
+@media (pointer: coarse) and (min-width: 861px) {
+  :root { --sidebar: 290px; }
+  .nav-item .nav-edit { display: none; }            /* edit projects via the project page (•••) */
+  .nav-item .count { margin-left: auto; }
+}
+@media (min-width: 861px) and (max-width: 1250px) {
+  .stat .ico { display: none; }
+  .stat .lbl { white-space: normal; }
+  .sync.ok .sync-label { display: none; }
+  .sync.ok .sync-short { display: inline; }
+  .sync.ok .sync-short { font-size: 0; }
+  .sync.ok { padding: 0; width: 40px; height: 40px; justify-content: center; }
+  .mode-pill .mode-label { display: none; }
+  .add-btn span { display: none; }
+  .add-btn { padding: 0; width: 46px; height: 46px; border-radius: 14px; }
+  .titles h1 { font-size: 26px; }
+  .week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (pointer: coarse) and (min-width: 861px) and (max-width: 1250px) {
+  .sync.ok { width: 46px; height: 46px; }
+  .mode-pill { padding: 0; width: 46px; height: 46px; justify-content: center; font-size: 20px; }
+}

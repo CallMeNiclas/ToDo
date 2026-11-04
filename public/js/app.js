@@ -907,7 +907,6 @@ function viewSearch(q) {
       const v = inp.value.trim();
       history.replaceState(null, '', '#/search' + (v ? '/' + encodeURIComponent(v) : ''));
       S.route = { name: 'search', arg: v };
-      $('#search').value = v;
       renderSearchResults(v);
     }, 120);
   });
@@ -1031,7 +1030,7 @@ function viewDashboard() {
   } else setTitle(`${hello}, Nic`, fmtLongDate(t));
   const cfg = dashConfig();
   const cards = cfg.order.filter((k) => !cfg.hidden[k]);
-  $('#content').innerHTML = `<div class="dash">${cards.map((k) => `<section class="dcard dc-${k}" data-card="${k}"></section>`).join('')}</div>
+  $('#content').innerHTML = `${cards.includes('stats') ? '<section class="dc-stats" data-card="stats"></section>' : ''}<div class="dash dash-flow">${cards.filter((k) => k !== 'stats').map((k) => `<section class="dcard dc-${k}" data-card="${k}"></section>`).join('')}</div>
     <div class="dash-foot"><a href="#/settings" class="btn sm ghost">${icon('grid')}Übersicht anpassen</a></div>`;
   const fill = (k, html) => { const el = $(`.dc-${k}`); if (el) el.innerHTML = html; };
   const link = (href, label) => `<a class="dcard-link" href="${href}">${esc(label)}${icon('right')}</a>`;
@@ -2090,18 +2089,6 @@ function bindGlobal() {
   $('#scrim').addEventListener('click', () => $('#app').classList.remove('menu-open'));
   $('#sidebar').addEventListener('click', (e) => { if (e.target.closest('a')) $('#app').classList.remove('menu-open'); });
   let st;
-  $('#search').addEventListener('input', (e) => {
-    clearTimeout(st);
-    st = setTimeout(() => {
-      const q = e.target.value.trim();
-      if (S.route.name === 'search' && $('#search-big')) {
-        $('#search-big').value = q;
-        S.route.arg = q;
-        history.replaceState(null, '', '#/search' + (q ? '/' + encodeURIComponent(q) : ''));
-        renderSearchResults(q);
-      } else if (q) go('#/search/' + encodeURIComponent(q));
-    }, 150);
-  });
   $('#add-project').addEventListener('click', () => newProject());
 
   document.addEventListener('click', async (e) => {
@@ -2232,7 +2219,7 @@ function bindGlobal() {
     }
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'q' || e.key === 'n') { e.preventDefault(); openQuickAdd(defaultsForRoute()); }
-    if (e.key === '/') { e.preventDefault(); if (window.innerWidth > 860) $('#search').focus(); else go('#/search'); }
+    if (e.key === '/') { e.preventDefault(); go('#/search'); }
   });
 }
 

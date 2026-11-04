@@ -28,13 +28,13 @@
   <div id="app" class="app" hidden>
     <aside class="sidebar" id="sidebar">
       <div class="brand"><img src="/icons/icon.svg" alt="" width="26" height="26"><span>NTD’s</span></div>
-      <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search" type="search" placeholder="Suchen" autocomplete="off"></label>
       <nav class="nav" id="nav-main"></nav>
       <div class="nav-head"><span>Projekte</span><button class="icon-btn sm" id="add-project" title="Projekt hinzufügen" aria-label="Projekt hinzufügen"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
       <nav class="nav" id="nav-projects"></nav>
       <div class="nav-head" id="labels-head"><span>Labels</span></div>
       <nav class="nav" id="nav-labels"></nav>
       <div class="sidebar-foot">
+        <a href="#/search" class="nav-item" data-route="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Suche</span></a>
         <a href="#/completed" class="nav-item" data-route="completed"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Erledigt</span></a>
         <a href="#/settings" class="nav-item" data-route="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span></a>
       </div>
@@ -47,7 +47,6 @@
         <div class="titles"><h1 id="view-title"></h1><div id="view-sub" class="sub"></div></div>
         <button class="focus-pill" id="focus-pill" type="button" hidden aria-label="Fokus-Timer"></button>
         <button class="mode-pill" id="mode-pill" type="button" aria-label="Modus wechseln"></button>
-        <button class="icon-btn search-btn" id="search-btn" aria-label="Suchen"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
         <button class="sync" id="sync" type="button"></button>
         <div class="top-actions" id="top-actions"></div>
         <button class="btn primary add-btn" id="quick-add-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>Aufgabe</span></button>
