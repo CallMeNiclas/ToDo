@@ -99,7 +99,9 @@ function applyBootstrap(b) {
   Object.assign(S, {
     tasks: b.tasks, projects: b.projects, places: b.places, settings: b.settings, today: b.today,
     doneToday: b.doneToday, google: b.googleConnected, vapid: b.vapidPublicKey, email: b.email,
+    mode: b.mode || S.mode, logos: b.logos || S.logos || {},
   });
+  renderMode();
   // tasks created offline that are not on the server yet
   for (const q of queue) if (q.op === 'create' && !S.tasks.some((t) => t.id === q.id)) S.tasks.push(q.task);
   for (const q of queue) if (q.op === 'complete') S.tasks = S.tasks.filter((t) => t.id !== q.id && t.parent_id !== q.id);
@@ -261,6 +263,84 @@ function projectOptions(selected, { exclude, none } = {}) {
   return opts.join('');
 }
 let collapsed = store.get('collapsed', {});
+
+// ---------------------------------------------------------------- focus modes
+function ctxOf(pid) {
+  let p = project(pid);
+  for (let i = 0; p && i < 10; i++) { if (p.context) return p.context; p = p.parent_id ? project(p.parent_id) : null; }
+  return null;
+}
+const curMode = () => S.mode?.mode || 'all';
+const inScope = (t) => { const m = curMode(); if (m === 'all') return true; const c = ctxOf(t.project_id); return !c || c === m; };
+const scoped = () => S.tasks.filter(inScope);
+function isWorkEvent(e) {
+  const colors = String(S.settings.work_colors || '').toLowerCase().split(',').filter(Boolean);
+  if (colors.includes(String(e.color || '').toLowerCase())) return true;
+  const kws = String(S.settings.work_keywords || '').toLowerCase().split(',').map((x) => x.trim()).filter(Boolean);
+  const hay = `${e.title} ${e.location || ''}`.toLowerCase();
+  return kws.some((k) => hay.includes(k));
+}
+const eventInScope = (e) => { const m = curMode(); return m === 'all' || (m === 'work' ? isWorkEvent(e) : !isWorkEvent(e)); };
+const MODE_UI = {
+  work: { label: 'Arbeit', emoji: '💼' },
+  private: { label: 'Privat', emoji: '🏠' },
+  all: { label: 'Alles', emoji: '🌐' },
+  holiday: { label: 'Urlaub', emoji: '🌴' },
+};
+function modeKey() { return S.mode?.holidayActive ? 'holiday' : curMode(); }
+function renderMode() {
+  const k = modeKey();
+  document.body.dataset.mode = k;
+  const pill = $('#mode-pill');
+  if (pill) {
+    const ui = MODE_UI[k];
+    const auto = S.mode?.source === 'schedule' ? ' · Zeitplan' : S.mode?.source === 'focus' ? ' · iPhone-Fokus' : '';
+    pill.innerHTML = `<span class="mode-emoji">${ui.emoji}</span><span class="mode-label">${ui.label}</span>`;
+    pill.title = `Modus: ${ui.label}${auto}`;
+  }
+  const wm = $('#watermark');
+  if (wm) {
+    const v = S.logos?.[k] || (k === 'holiday' ? S.logos?.private : null);
+    const key = S.logos?.[k] ? k : 'private';
+    wm.style.backgroundImage = v && k !== 'all' ? `url(/api/logo/${key}?v=${v})` : 'none';
+  }
+}
+function openModeMenu() {
+  const m = S.mode || {};
+  const wrap = document.createElement('div');
+  wrap.className = 'modal open';
+  const nextTxt = m.next ? `nächster Wechsel: ${MODE_UI[m.next.mode].label} um ${new Date(m.next.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}${localDateOf(m.next.at) !== S.today ? ' (' + relDate(localDateOf(m.next.at), S.today) + ')' : ''}` : 'kein Zeitplan aktiv';
+  const btn = (mode, extra = '') => `<button class="mode-opt${curMode() === mode && !m.holidayActive && m.source !== 'schedule' && m.source !== 'focus' ? ' on' : ''}" data-mode="${mode}">${MODE_UI[mode].emoji} <b>${MODE_UI[mode].label}</b>${extra}</button>`;
+  wrap.innerHTML = `<div class="qa-card mode-card"><div style="font-weight:650;font-size:17px;padding:4px 6px 4px">Modus</div>
+    <div class="muted" style="padding:0 6px 12px">Aktuell: ${MODE_UI[modeKey()].emoji} ${MODE_UI[modeKey()].label}${m.source === 'schedule' ? ' (Zeitplan)' : m.source === 'focus' ? ' (iPhone-Fokus)' : m.source === 'holiday' ? ` (bis ${m.holiday.to.split('-').reverse().join('.')})` : m.source === 'manual' ? ' (manuell)' : ''}</div>
+    ${m.holidayActive ? '' : btn('work') + btn('private') + btn('all')}
+    ${m.holidayActive ? '' : `<button class="mode-opt${m.source === 'schedule' || m.source === 'default' ? ' on' : ''}" data-mode="auto">⏱ <b>Automatisch</b><small>${esc(nextTxt)}</small></button>`}
+    <button class="mode-opt" data-mode="holiday">🌴 <b>${m.holiday ? 'Urlaub bearbeiten / beenden' : 'Urlaub planen …'}</b>${m.holiday ? `<small>${m.holiday.from.split('-').reverse().join('.')} – ${m.holiday.to.split('-').reverse().join('.')}</small>` : ''}</button>
+    <div class="qa-foot" style="margin-top:8px"><a class="btn sm ghost" href="#/settings" data-close>Einstellungen</a><div class="qa-btns"><button class="btn" data-close>Schließen</button></div></div></div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  wrap.addEventListener('click', async (e) => {
+    if (e.target === wrap || e.target.closest('[data-close]')) return close();
+    const o = e.target.closest('[data-mode]');
+    if (!o) return;
+    const mode = o.dataset.mode;
+    close();
+    if (offlineBlocked()) return;
+    try {
+      if (mode === 'holiday') {
+        const h = m.holiday || {};
+        const r = await dialog({ title: '🌴 Urlaub', fields: [{ name: 'from', label: 'Von', type: 'date', value: h.from || S.today }, { name: 'to', label: 'Bis (inklusive)', type: 'date', value: h.to || addDays(S.today, 7) }], ok: 'Speichern', danger: m.holiday ? 'Urlaub beenden' : undefined });
+        if (!r) return;
+        S.mode = await api('/holiday', { method: 'POST', body: r.__danger ? { clear: true } : r });
+      } else {
+        S.mode = await api('/mode', { method: 'POST', body: { mode } });
+      }
+      renderMode();
+      render();
+      toast(`Modus: ${MODE_UI[modeKey()].emoji} ${MODE_UI[modeKey()].label}`);
+    } catch (err) { toast(err.message); }
+  });
+}
 const endOfWeek = (d) => addDays(d, 7 - isoWeekday(d));
 const mondayOf = (d) => addDays(d, 1 - isoWeekday(d));
 
@@ -268,13 +348,13 @@ function counts() {
   const t = S.today;
   const eow = endOfWeek(t);
   let overdue = 0, today = 0, week = 0, mins = 0;
-  for (const x of open()) {
+  for (const x of scoped()) {
     if (!x.due_date) continue;
     if (x.due_date < t) overdue++;
     if (x.due_date === t) { today++; mins += x.duration_min || 0; }
     if (x.due_date <= eow) week++;
   }
-  return { overdue, today, week, total: open().length, mins, inbox: open().filter((x) => x.project_id === 'inbox' && !x.parent_id).length };
+  return { overdue, today, week, total: scoped().length, mins, inbox: scoped().filter((x) => x.project_id === 'inbox' && !x.parent_id).length };
 }
 
 function sortTasks(list) {
@@ -335,7 +415,7 @@ function timeOf(iso) {
 }
 /** events touching a given local date */
 function eventsOn(evs, date) {
-  return evs.filter((e) => {
+  return evs.filter(eventInScope).filter((e) => {
     if (e.allDay) return e.start <= date && e.end > date;
     const s = localDateOf(e.start);
     const en = localDateOf(new Date(new Date(e.end).getTime() - 1).toISOString());
@@ -416,7 +496,7 @@ function renderNav() {
     const toggle = hasKids
       ? `<button class="tree-toggle${collapsed[p.id] ? '' : ' open'}" data-toggle-project="${p.id}" aria-label="${collapsed[p.id] ? 'Aufklappen' : 'Zuklappen'}">${icon('right')}</button>`
       : '<span class="tree-toggle-space"></span>';
-    return `<a href="#/project/${p.id}" class="nav-item${active('project', p.id)}" style="padding-left:${4 + depth * 18}px">${toggle}<span class="dot" style="background:${esc(p.color)}"></span><span class="nav-name${p.is_main ? ' main' : ''}">${esc(p.name)}</span><span class="count">${n || ''}</span><button class="icon-btn sm nav-edit" data-edit-project="${p.id}" aria-label="Projekt bearbeiten">${icon('more')}</button></a>`;
+    return `<a href="#/project/${p.id}" class="nav-item${active('project', p.id)}" style="padding-left:${4 + depth * 18}px">${toggle}<span class="dot" style="background:${esc(p.color)}"></span><span class="nav-name${p.is_main ? ' main' : ''}">${esc(p.name)}</span>${!p.parent_id && p.context ? `<span class="ctx-mark" title="${p.context === 'work' ? 'Arbeit' : 'Privat'}">${p.context === 'work' ? '💼' : '🏠'}</span>` : ''}<span class="count">${n || ''}</span><button class="icon-btn sm nav-edit" data-edit-project="${p.id}" aria-label="Projekt bearbeiten">${icon('more')}</button></a>`;
   }).join('') || '<div class="nav-item" style="color:var(--faint);cursor:default">Noch keine Projekte</div>';
 
   const labels = allLabels();
@@ -509,8 +589,8 @@ function viewToday() {
   const [, mm, dd] = t.split('-').map(Number);
   const dateLabel = narrow ? `${WD_SHORT[isoWeekday(t)]}., ${dd}. ${MONTHS[mm - 1].slice(0, 3)}.` : fmtLongDate(t);
   setTitle('Heute', dateLabel + (c.mins ? ` · ${narrow ? fmtShort(c.mins) : fmtMins(c.mins) + ' geplant'}` : ''));
-  const overdue = sortTasks(open().filter((x) => x.due_date && x.due_date < t));
-  const today = sortTasks(open().filter((x) => x.due_date === t));
+  const overdue = sortTasks(scoped().filter((x) => x.due_date && x.due_date < t));
+  const today = sortTasks(scoped().filter((x) => x.due_date === t));
   const timed = today.filter((x) => x.due_time);
   const untimed = today.filter((x) => !x.due_time);
 
@@ -617,7 +697,7 @@ function viewWeek() {
   const isThis = monday === mondayOf(S.today);
   const [, m1, d1] = monday.split('-').map(Number);
   const [, m2, d2] = sunday.split('-').map(Number);
-  const tasksInWeek = open().filter((t) => t.due_date >= monday && t.due_date <= sunday);
+  const tasksInWeek = scoped().filter((t) => t.due_date >= monday && t.due_date <= sunday);
   const mins = tasksInWeek.reduce((n, t) => n + (t.duration_min || 0), 0);
   setTitle(isThis ? 'Diese Woche' : `KW ${isoWeekNo(monday)}`, `${d1}. ${MONTHS[m1 - 1].slice(0, 3)} – ${d2}. ${MONTHS[m2 - 1].slice(0, 3)} · ${tasksInWeek.length} Aufgaben${mins ? ' · ' + fmtMins(mins) : ''}`);
   $('#top-actions').innerHTML = `<div class="week-nav"><a class="icon-btn" href="#/week/${addDays(monday, -7)}" aria-label="Vorherige Woche">${icon('left')}</a>${isThis ? '' : '<a class="btn sm" href="#/week">Heute</a>'}<a class="icon-btn" href="#/week/${addDays(monday, 7)}" aria-label="Nächste Woche">${icon('right')}</a></div>`;
@@ -629,8 +709,8 @@ function viewWeek() {
       const d = addDays(monday, i);
       const isToday = d === S.today;
       const thisWeek = monday <= S.today && S.today <= sunday;
-      let dayTasks = open().filter((t) => t.due_date === d && !(thisWeek && d < S.today));
-      if (isToday) dayTasks = [...open().filter((t) => t.due_date && t.due_date < S.today), ...dayTasks];
+      let dayTasks = scoped().filter((t) => t.due_date === d && !(thisWeek && d < S.today));
+      if (isToday) dayTasks = [...scoped().filter((t) => t.due_date && t.due_date < S.today), ...dayTasks];
       dayTasks = sortTasks(dayTasks);
       const dayEv = eventsOn(evs, d);
       const load = dayTasks.filter((t) => t.due_date === d).reduce((n, t) => n + (t.duration_min || 0), 0);
@@ -687,7 +767,7 @@ function viewUpcoming() {
   setTitle('Demnächst', 'Ab morgen');
   const start = addDays(S.today, 1);
   const days = 14;
-  const future = sortTasks(open().filter((t) => t.due_date && t.due_date >= start));
+  const future = sortTasks(scoped().filter((t) => t.due_date && t.due_date >= start));
   const dates = new Set();
   for (let i = 0; i < days; i++) dates.add(addDays(start, i));
   for (const t of future) dates.add(t.due_date);
@@ -920,14 +1000,14 @@ function viewDashboard() {
   fill('stats', statsHtml());
 
   // tasks today
-  const overdue = sortTasks(open().filter((x) => x.due_date && x.due_date < t));
-  const today = sortTasks(open().filter((x) => x.due_date === t));
+  const overdue = sortTasks(scoped().filter((x) => x.due_date && x.due_date < t));
+  const today = sortTasks(scoped().filter((x) => x.due_date === t));
   const list = [...overdue, ...today];
   fill('today', `<div class="dcard-head"><h2>${icon('today')}Aufgaben heute</h2>${link('#/today', `Alle ${list.length}`)}</div>
     ${list.length ? `<div class="dcard-list">${list.slice(0, 6).map((x) => taskRow(x, { showDate: x.due_date !== t })).join('')}</div>${list.length > 6 ? `<a class="dcard-more" href="#/today">+ ${list.length - 6} weitere</a>` : ''}` : emptyHtml('🌤️', 'Nichts mehr für heute.')}`);
 
   // deadlines
-  const dls = open().filter((x) => x.deadline && x.deadline <= addDays(t, 7)).sort((a, b) => a.deadline.localeCompare(b.deadline));
+  const dls = scoped().filter((x) => x.deadline && x.deadline <= addDays(t, 7)).sort((a, b) => a.deadline.localeCompare(b.deadline));
   fill('deadlines', `<div class="dcard-head"><h2>${icon('target')}Deadlines</h2><span class="meta">nächste 7 Tage</span></div>
     ${dls.length ? `<div class="dcard-list">${dls.slice(0, 6).map((x) => taskRow(x)).join('')}</div>` : emptyHtml('🎯', 'Keine Deadlines in den nächsten 7 Tagen.')}`);
 
@@ -1047,6 +1127,23 @@ async function viewHealth() {
 }
 
 // ---------------------------------------------------------------- settings
+const GCOLORS = [['#7986cb','Lavendel'],['#33b679','Salbei'],['#8e24aa','Weintraube'],['#e67c73','Flamingo'],['#f6bf26','Banane'],['#f4511e','Mandarine'],['#039be5','Pfau'],['#616161','Graphit'],['#3f51b5','Blaubeere'],['#0b8043','Basilikum'],['#d50000','Tomate']];
+
+async function uploadLogo(mode, file) {
+  const img = await createImageBitmap(file);
+  const max = 640, scale = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  let dataUrl = c.toDataURL('image/webp', 0.85);
+  if (!dataUrl.startsWith('data:image/webp')) dataUrl = c.toDataURL('image/png');
+  const r = await api('/logo/' + mode, { method: 'POST', body: { dataUrl } });
+  S.logos = { ...S.logos, [mode]: r.v };
+  renderMode();
+  viewSettings();
+  toast('Logo gespeichert');
+}
+
 function renderDashSettings() {
   const box = $('#dash-settings');
   if (!box) return;
@@ -1115,6 +1212,28 @@ async function viewSettings() {
       </details>
     </div>
 
+    <div class="panel" id="focus-settings">
+      <h2>Fokus-Modus: Arbeit / Privat</h2>
+      <p>Der Modus filtert Übersicht, Heute, Woche und Demnächst. Projekte ordnest du über „•••“ → <b>Bereich</b> zu (Unterprojekte erben). Projekte ohne Bereich erscheinen in beiden Modi.</p>
+      <div class="row"><label>Zeitplan</label><select data-setting="work_schedule"><option value="1" ${+s.work_schedule ? 'selected' : ''}>An</option><option value="0" ${+s.work_schedule ? '' : 'selected'}>Aus</option></select></div>
+      <div class="row"><label>Arbeitstage</label><div class="days-pick" id="work-days">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<button type="button" class="${String(s.work_days).split(',').includes(String(d)) ? 'on' : ''}" data-workday="${d}">${WD_SHORT[d]}</button>`).join('')}</div></div>
+      <div class="row"><label>Arbeitszeit</label><input type="time" data-setting="work_start" value="${esc(s.work_start)}"> bis <input type="time" data-setting="work_end" value="${esc(s.work_end)}"></div>
+      <div class="row"><label>Termine = Arbeit, wenn Farbe</label><div class="color-pick">${GCOLORS.map(([c, n]) => `<button type="button" class="${String(s.work_colors).toLowerCase().split(',').includes(c) ? 'on' : ''}" data-workcolor="${c}" title="${n}" style="--c:${c}"><span></span>${n}</button>`).join('')}</div></div>
+      <div class="row"><label>… oder Stichwort in Titel/Ort</label><input data-setting="work_keywords" value="${esc(s.work_keywords)}" placeholder="z. B. Trippelsberg, Fundus, Messe" style="flex:1;min-width:200px"></div>
+      <h3 class="sub-h">Logos im Hintergrund</h3>
+      <div class="logo-row">${['work', 'private', 'holiday'].map((m) => `<div class="logo-slot"><div class="logo-prev" style="${S.logos?.[m] ? `background-image:url(/api/logo/${m}?v=${S.logos[m]})` : ''}">${S.logos?.[m] ? '' : MODE_UI[m].emoji}</div><div><b>${MODE_UI[m].label}</b></div><label class="btn sm">Bild wählen<input type="file" accept="image/*" data-logo="${m}" hidden></label>${S.logos?.[m] ? `<button class="btn sm ghost" data-del-logo="${m}">Entfernen</button>` : ''}</div>`).join('')}</div>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:14px">iPhone-Fokus koppeln (Kurzbefehle)</summary>
+        <ol>
+          <li>App <b>Kurzbefehle</b> → <b>Automation</b> → <b>+</b> → <b>Fokus</b> → <b>Arbeit</b> → „Wenn aktiviert“ → <b>Sofort ausführen</b>.</li>
+          <li>Aktion <b>„Inhalte von URL abrufen“</b>, URL: die erste Adresse unten, Methode <b>POST</b>.</li>
+          <li>Zweite Automation: Fokus <b>Arbeit</b> → „Wenn deaktiviert“ → gleiche Aktion mit der zweiten Adresse.</li>
+        </ol>
+        <div class="row"><span class="code" id="mode-url-work">…</span><button class="btn sm" data-copy-el="mode-url-work">${icon('copy')}</button></div>
+        <div class="row"><span class="code" id="mode-url-private">…</span><button class="btn sm" data-copy-el="mode-url-private">${icon('copy')}</button></div>
+        <p class="muted small">Ein Wechsel über den Fokus oder manuell in der App gilt bis zum nächsten geplanten Wechsel. Danach übernimmt wieder der Zeitplan.</p>
+      </details>
+    </div>
+
     <div class="panel">
       <h2>Übersicht anpassen</h2>
       <p>Welche Kacheln die Startseite zeigt und in welcher Reihenfolge. Gilt nur für <b>dieses Gerät</b> (${window.innerWidth <= 860 ? 'Handy-Ansicht' : 'große Ansicht'}).</p>
@@ -1128,6 +1247,8 @@ async function viewSettings() {
   </div>`;
   renderDashSettings();
   api('/location-token').then((d) => {
+    const base = location.origin + '/hooks/mode?token=' + d.token + '&mode=';
+    if ($('#mode-url-work')) { $('#mode-url-work').textContent = base + 'work'; $('#mode-url-private').textContent = base + 'private'; }
     if (!$('#hook-url')) return;
     $('#hook-url').textContent = d.url;
     $('#hook-token').textContent = d.token;
@@ -1670,6 +1791,7 @@ function projectFields(p, parentId) {
     { name: 'name', label: 'Name', value: p ? p.name : '', placeholder: 'z. B. Fundus7' },
     { name: 'is_main', type: 'checkbox', label: 'Hauptprojekt', hint: 'Kann Unterprojekte enthalten', checked: p ? !!p.is_main : false, toggles: 'parent_id' },
     ...(hasKids ? [] : [{ name: 'parent_id', label: 'Einem Hauptprojekt zuordnen', type: 'select', options: mainOptions(p ? p.parent_id : parentId, p?.id) }]),
+    { name: 'context', label: 'Bereich (für Fokus-Modus)', type: 'select', options: ['', 'work', 'private'].map((v) => `<option value="${v}" ${(p?.context || '') === v ? 'selected' : ''}>${v === 'work' ? '💼 Arbeit' : v === 'private' ? '🏠 Privat' : '– beides / neutral –'}</option>`).join(''), hint: 'Unterprojekte erben den Bereich des Hauptprojekts' },
     { name: 'color', label: 'Farbe', type: 'color', value: p ? p.color : parentId ? project(parentId)?.color : COLORS[S.projects.length % COLORS.length] },
   ];
 }
@@ -1694,7 +1816,7 @@ async function editProject(id) {
   const kids = childProjects(id);
   if (p.is_main && !isMain && kids.length && !confirm(`„${p.name}“ ist dann kein Hauptprojekt mehr. Die ${kids.length} Unterprojekt(e) werden zu normalen Projekten. Fortfahren?`)) return;
   try {
-    const body = { name: r.name, color: r.color, is_main: isMain };
+    const body = { name: r.name, color: r.color, is_main: isMain, context: r.context || null };
     if ('parent_id' in r) body.parent_id = isMain ? null : r.parent_id || null;
     const u = await api('/projects/' + id, { method: 'PATCH', body });
     Object.assign(p, u);
@@ -1711,7 +1833,7 @@ async function newProject(parentId = '') {
   if (!r?.name?.trim()) return;
   const isMain = r.is_main === 'on';
   try {
-    const p = await api('/projects', { method: 'POST', body: { name: r.name, color: r.color, is_main: isMain, parent_id: isMain ? null : r.parent_id || null } });
+    const p = await api('/projects', { method: 'POST', body: { name: r.name, color: r.color, is_main: isMain, parent_id: isMain ? null : r.parent_id || null, context: r.context || null } });
     S.projects.push(p);
     if (p.parent_id) { delete collapsed[p.parent_id]; store.set('collapsed', collapsed); }
     go('#/project/' + p.id);
@@ -1810,7 +1932,32 @@ function bindGlobal() {
       return viewSettings();
     }
     if (el.closest('#search-btn')) return go('#/search');
+    if (el.closest('#mode-pill')) return openModeMenu();
     if (el.closest('#sync')) { if (queue.length) return sync(); return refresh(); }
+    const wd = el.closest('[data-workday]');
+    if (wd) {
+      wd.classList.toggle('on');
+      const days = $$('#work-days [data-workday].on').map((b) => b.dataset.workday).join(',');
+      S.settings = await api('/settings', { method: 'PATCH', body: { work_days: days } });
+      S.mode = await api('/mode'); renderMode();
+      return toast('Gespeichert');
+    }
+    const wc = el.closest('[data-workcolor]');
+    if (wc) {
+      wc.classList.toggle('on');
+      const cols = $$('[data-workcolor].on').map((b) => b.dataset.workcolor).join(',');
+      S.settings = await api('/settings', { method: 'PATCH', body: { work_colors: cols } });
+      S.cal.clear();
+      return toast('Gespeichert');
+    }
+    const ce = el.closest('[data-copy-el]');
+    if (ce) return copy($('#' + ce.dataset.copyEl).textContent);
+    const dlo = el.closest('[data-del-logo]');
+    if (dlo) {
+      await api('/logo/' + dlo.dataset.delLogo, { method: 'DELETE' });
+      S.logos = { ...S.logos, [dlo.dataset.delLogo]: null };
+      renderMode(); return viewSettings();
+    }
     const cp = el.closest('[data-copy]');
     if (cp) return copy(cp.dataset.copy);
     if (el.closest('[data-reschedule-overdue]')) {
@@ -1826,10 +1973,15 @@ function bindGlobal() {
   });
 
   document.addEventListener('change', async (e) => {
+    if (e.target.dataset?.logo && e.target.files?.[0]) {
+      try { await uploadLogo(e.target.dataset.logo, e.target.files[0]); } catch (err) { toast(err.message); }
+      return;
+    }
     const k = e.target.dataset?.setting;
     if (!k) return;
     try {
       S.settings = await api('/settings', { method: 'PATCH', body: { [k]: e.target.value } });
+      if (k.startsWith('work_')) { S.mode = await api('/mode'); renderMode(); }
       if (k === 'step_goal' && healthCache) { healthCache.goal = +S.settings.step_goal; store.set('health', healthCache); if (S.route.name === 'health') viewHealth(); }
       toast('Gespeichert');
     } catch (err) { toast(err.message); }

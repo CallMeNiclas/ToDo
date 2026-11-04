@@ -4,6 +4,7 @@ import { handleAuth, getSession, devLogin } from './auth.js';
 import { handleMcp } from './mcp.js';
 import { handleLocationHook, runDueNotifications } from './notify.js';
 import { handleHealthHook } from './health.js';
+import { handleModeHook } from './mode.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -103,6 +104,7 @@ async function handleDefault(request, env) {
     }
     if (p.startsWith('/hooks/location')) return handleLocationHook(request, env);
     if (p.startsWith('/hooks/health')) return handleHealthHook(request, env);
+    if (p.startsWith('/hooks/mode')) return handleModeHook(request, env);
     if (p.startsWith('/api/')) {
       // CSRF: mutating API calls must come from our own origin
       if (request.method !== 'GET') {

@@ -1,0 +1,40 @@
+const { chromium, devices } = require('playwright');
+const OUT = process.argv[2], LOGO = process.argv[3];
+(async () => {
+  const b = await chromium.launch();
+  const fakeCal = (route) => {
+    const u = new URL(route.request().url()); const from = u.searchParams.get('from');
+    const ev = (s, e, t, c) => ({ id: t, title: t, allDay: false, start: `${from}T${s}:00+01:00`, end: `${from}T${e}:00+01:00`, color: c });
+    route.fulfill({ json: { connected: true, events: [ev('09:30', '16:00', 'Büro', '#039be5'), ev('10:00', '11:00', 'Wochenbesprechung', '#3f51b5'), ev('19:00', '19:45', 'Morgen mit Claude durchsprechen', '#e67c73'), ev('20:30', '21:30', 'BVB – Bayern', '#f6bf26')] } });
+  };
+  const ctx = await b.newContext({ ...devices['iPhone 15 Pro Max'], colorScheme: 'dark', locale: 'de-DE', timezoneId: 'Europe/Berlin' });
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  p.on('dialog', (d) => d.accept());
+  await p.route('**/api/calendar*', fakeCal);
+  await p.goto('http://localhost:8787/auth/dev'); await p.waitForSelector('.dash');
+  const api = (path, method, body) => p.evaluate(([path, method, body]) => fetch('/api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()), [path, method, body]);
+  await p.evaluate(() => fetch('/api/tasks').then(r => r.json()).then(async (d) => { for (const t of d.tasks) await fetch('/api/tasks/' + t.id, { method: 'DELETE' }); }));
+  const f7 = await api('/projects', 'POST', { name: 'Fundus7', is_main: true, context: 'work' });
+  const todo = await api('/projects', 'POST', { name: "To-Do's", parent_id: f7.id });
+  const nic = await api('/projects', 'POST', { name: 'Nic', context: 'private' });
+  await api('/tasks', 'POST', { title: 'Tourenplan KW 47', project_id: todo.id, due_date: '2026-11-04', priority: 2 });
+  await api('/tasks', 'POST', { title: 'Spedi bestellen', project_id: f7.id, due_date: '2026-11-04', priority: 3 });
+  await api('/tasks', 'POST', { title: 'Abend Spaziergang', project_id: nic.id, due_date: '2026-11-04', due_time: '20:00', priority: 2 });
+  await api('/tasks', 'POST', { title: 'Inbox-Sache', due_date: '2026-11-04' });
+  const vis = async () => { await p.goto('http://localhost:8787/#/dashboard'); await p.reload(); await p.waitForSelector('.dash'); await p.waitForTimeout(500); await p.goto('http://localhost:8787/#/today'); await p.waitForTimeout(600); return p.$$eval('.task .t-title', (els) => els.map((e) => e.textContent)); };
+  for (const m of ['work', 'private', 'all']) { await api('/mode', 'POST', { mode: m }); console.log(m, '→', (await vis()).join(' | ')); console.log('   events:', await p.$$eval('.block:not(.task-block) b', (els) => els.map((e) => e.textContent).join(' | '))); }
+  await api('/mode', 'POST', { mode: 'work' });
+  await p.goto('http://localhost:8787/#/settings'); await p.waitForTimeout(600);
+  await p.setInputFiles('input[data-logo="work"]', LOGO); await p.waitForTimeout(1200);
+  await p.goto('http://localhost:8787/#/dashboard'); await p.waitForTimeout(800);
+  await p.screenshot({ path: OUT + '/focus-work.png' });
+  await p.click('#mode-pill'); await p.waitForTimeout(300);
+  await p.screenshot({ path: OUT + '/focus-menu.png' });
+  const h = await api('/holiday', 'POST', { from: '2026-11-03', to: '2026-11-10' });
+  console.log('holiday:', h.mode, h.source, h.holidayActive);
+  await api('/holiday', 'POST', { clear: true });
+  const ov = await p.evaluate(() => ({ W: document.documentElement.clientWidth, sw: document.documentElement.scrollWidth }));
+  console.log('overflow', JSON.stringify(ov));
+  await b.close();
+})();

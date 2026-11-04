@@ -3,6 +3,7 @@
 import * as T from './tasks.js';
 import { listEvents, GoogleNotConnected } from './google.js';
 import { healthSummary } from './health.js';
+import { computeMode, setMode, setHoliday, contextOf } from './mode.js';
 import { localNow, addDays, isoWeekday, zonedToUtc } from './time.js';
 
 const PROTOCOL_VERSIONS = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -144,6 +145,7 @@ const TOOLS = [
         name: { type: 'string' },
         color: { type: 'string', description: 'Hex, z. B. #10b981' },
         parent: { type: ['string', 'null'], description: 'Hauptprojekt, dem das Projekt untergeordnet wird (ID oder Name, z. B. "Fundus7"). Wird bei Bedarf automatisch zum Hauptprojekt. null = keinem zugeordnet.' },
+        context: { type: ['string', 'null'], enum: ['work', 'private', null], description: 'Bereich für den Fokus-Modus: work = Arbeit, private = Privat, null = in beiden sichtbar. Unterprojekte erben vom Hauptprojekt.' },
         is_main: { type: 'boolean', description: 'Als Hauptprojekt markieren (kann dann Unterprojekte haben). false = Unterprojekte werden zu normalen Projekten.' },
       },
       required: ['action'],
@@ -157,6 +159,19 @@ const TOOLS = [
       properties: { from_date: { type: 'string', description: 'YYYY-MM-DD, Standard heute' }, to_date: { type: 'string', description: 'YYYY-MM-DD inklusive, Standard = from_date' } },
     },
     annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'set_mode',
+    description: 'Fokus-Modus der App setzen: work (nur Arbeit), private (nur Privat), all (alles), auto (wieder Zeitplan/iPhone-Fokus folgen). Ein manueller Wechsel gilt bis zum nächsten geplanten Wechsel. Urlaub: holiday_from/holiday_to (YYYY-MM-DD) setzen oder holiday_clear=true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string', enum: ['work', 'private', 'all', 'auto'] },
+        holiday_from: { type: 'string' },
+        holiday_to: { type: 'string' },
+        holiday_clear: { type: 'boolean' },
+      },
+    },
   },
   {
     name: 'get_health',
@@ -283,6 +298,7 @@ async function callTool(env, name, a = {}) {
       const today = dated.filter((t) => t.due_date === c.today);
       const week = dated.filter((t) => t.due_date <= eow);
       return {
+        mode: await computeMode(env),
         today: c.today,
         weekday: new Intl.DateTimeFormat('de-DE', { weekday: 'long', timeZone: env.TIMEZONE }).format(new Date()),
         counts: { overdue: overdue.length, today: today.length, this_week_incl_overdue: week.length, open_total: all.length },
@@ -387,16 +403,16 @@ async function callTool(env, name, a = {}) {
       const { results } = await env.DB.prepare('SELECT project_id, COUNT(*) AS n FROM tasks WHERE completed_at IS NULL GROUP BY project_id').all();
       return {
         projects: c.projects.map((p) => ({
-          id: p.id, name: p.name, path: projectPath(c, p.id), is_main: !!p.is_main, parent_id: p.parent_id || null, color: p.color,
+          id: p.id, name: p.name, path: projectPath(c, p.id), is_main: !!p.is_main, area: contextOf(c.projects, p.id), parent_id: p.parent_id || null, color: p.color,
           open_tasks: results.find((r) => r.project_id === p.id)?.n || 0,
         })),
       };
     }
     case 'manage_project': {
       const parent = a.parent === undefined ? undefined : a.parent ? resolveProject(c, a.parent) : null;
-      if (a.action === 'create') return T.createProject(env, { name: a.name, color: a.color, parent_id: parent, is_main: a.is_main }, { promote: true });
+      if (a.action === 'create') return T.createProject(env, { name: a.name, color: a.color, parent_id: parent, is_main: a.is_main, context: a.context }, { promote: true });
       const id = resolveProject(c, a.id || a.name);
-      if (a.action === 'update') return T.updateProject(env, id, { name: a.id ? a.name : undefined, color: a.color, parent_id: parent, is_main: a.is_main }, { promote: true });
+      if (a.action === 'update') return T.updateProject(env, id, { name: a.id ? a.name : undefined, color: a.color, parent_id: parent, is_main: a.is_main, context: a.context }, { promote: true });
       if (a.action === 'delete') return T.deleteProject(env, id);
       throw new T.InputError('Unbekannte action');
     }
@@ -404,6 +420,12 @@ async function callTool(env, name, a = {}) {
       const from = a.from_date || c.today;
       const to = a.to_date || from;
       return { from, to, events: await calendar(env, from, to) };
+    }
+    case 'set_mode': {
+      if (a.holiday_clear) await setHoliday(env, { clear: true });
+      else if (a.holiday_from || a.holiday_to) await setHoliday(env, { from: a.holiday_from, to: a.holiday_to || a.holiday_from });
+      if (a.mode) return setMode(env, a.mode);
+      return computeMode(env);
     }
     case 'get_health': {
       const h = await healthSummary(env, a.days || 7);

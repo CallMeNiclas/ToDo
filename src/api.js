@@ -5,6 +5,7 @@ import { getVapid, pushAll } from './notify.js';
 import { localNow, addDays, zonedToUtc } from './time.js';
 import { b64url } from './push.js';
 import { healthSummary } from './health.js';
+import { computeMode, setMode, setHoliday } from './mode.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
@@ -29,7 +30,8 @@ export async function handleApi(request, env) {
       ]);
       return json({
         today, timezone: env.TIMEZONE, email: env.OWNER_EMAIL, projects, tasks, places, settings,
-        doneToday, vapidPublicKey: vapid.publicKey,
+        doneToday, vapidPublicKey: vapid.publicKey, mode: await computeMode(env),
+        logos: Object.fromEntries(await Promise.all(['work', 'private', 'holiday'].map(async (m) => [m, (await T.getSetting(env, 'logo_v_' + m)) || null]))),
         googleConnected: !!(await T.getSetting(env, 'google_refresh_token')),
       });
     }
@@ -65,6 +67,31 @@ export async function handleApi(request, env) {
       return json({ token, url: url.origin + '/hooks/location' });
     }
 
+    if (path === '/mode' && method === 'GET') return json(await computeMode(env));
+    if (path === '/mode' && method === 'POST') return json(await setMode(env, body.mode));
+    if (path === '/holiday' && method === 'POST') return json(await setHoliday(env, body));
+    if ((r = m(/^\/logo\/(work|private|holiday)$/))) {
+      const key = 'logo_' + r[1];
+      if (method === 'GET') {
+        const v = await T.getSetting(env, key);
+        if (!v) return new Response('not found', { status: 404 });
+        const [, type, b64] = v.match(/^data:([^;]+);base64,(.*)$/) || [];
+        const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        return new Response(bin, { headers: { 'Content-Type': type, 'Cache-Control': 'private, max-age=31536000, immutable' } });
+      }
+      if (method === 'POST') {
+        const d = String(body.dataUrl || '');
+        if (!/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(d) || d.length > 700000) throw new T.InputError('Bild als PNG/JPG/WebP, max. ca. 500 KB');
+        await T.setSetting(env, key, d);
+        const v = Date.now().toString(36);
+        await T.setSetting(env, 'logo_v_' + r[1], v);
+        return json({ ok: true, v });
+      }
+      if (method === 'DELETE') {
+        await env.DB.prepare('DELETE FROM settings WHERE key IN (?, ?)').bind(key, 'logo_v_' + r[1]).run();
+        return json({ ok: true });
+      }
+    }
     if (path === '/health' && method === 'GET') return json(await healthSummary(env, +url.searchParams.get('days') || 14));
     if (path === '/health-token' && (method === 'GET' || method === 'POST')) {
       const token = method === 'POST'

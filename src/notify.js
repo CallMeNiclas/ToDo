@@ -3,6 +3,8 @@ import { ensureSetting, getTask, getSetting, listOpenTasks } from './tasks.js';
 import { generateVapidKeys, sendPush } from './push.js';
 import { sendMail } from './google.js';
 import { localNow, addDays } from './time.js';
+import { computeMode, contextOf } from './mode.js';
+import { listProjects } from './tasks.js';
 
 export async function getVapid(env) {
   const json = await ensureSetting(env, 'vapid', async () => JSON.stringify(await generateVapidKeys()));
@@ -89,6 +91,8 @@ export async function runDueNotifications(env) {
     `SELECT n.* FROM notifications n JOIN tasks t ON t.id = n.task_id
      WHERE n.sent_at IS NULL AND n.fire_at <= ? AND t.completed_at IS NULL ORDER BY n.fire_at LIMIT 20`,
   ).bind(now.toISOString()).all();
+  const mode = results.length ? await computeMode(env, now) : null;
+  const projects = mode?.holidayActive ? await listProjects(env) : null;
   for (const n of results) {
     // claim first so an overlapping run can't double-send
     const claim = await env.DB.prepare('UPDATE notifications SET sent_at = ? WHERE id = ? AND sent_at IS NULL').bind(now.toISOString(), n.id).run();
@@ -96,6 +100,7 @@ export async function runDueNotifications(env) {
     const late = now.getTime() - new Date(n.fire_at).getTime() > 3 * 3600 * 1000;
     if (late) continue; // skip anything hours late (e.g. after downtime)
     const task = await getTask(env, n.task_id);
+    if (task && projects && contextOf(projects, task.project_id) === 'work') continue; // on holiday: no work reminders
     if (task) await notifyTask(env, task, { email: !!n.email, reason: n.kind === 'deadline' ? '🎯 Deadline heute' : 'Erinnerung' });
   }
   // housekeeping: drop sent notifications older than 30 days

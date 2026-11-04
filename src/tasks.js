@@ -31,6 +31,22 @@ export const USER_SETTINGS = {
   p1_mail_time: '08:00',      // P1 tasks without time: mail on due day at
   mail_enabled: 1,
   step_goal: 10000,           // daily step goal (Apple Health)
+  // focus modes
+  work_schedule: 1,           // switch between work/private automatically by time
+  work_days: '1,2,3,4,5',     // ISO weekdays
+  work_start: '08:15',
+  work_end: '18:15',
+  work_colors: '#3f51b5,#039be5', // Google event colours that count as work
+  work_keywords: '',          // comma separated words in title/location that mark work events
+};
+const HEX_LIST = /^(#[0-9a-f]{6})?(,#[0-9a-f]{6})*$/i;
+const SETTING_RULES = {
+  p1_mail_time: (v) => TIME_RE.test(v),
+  work_start: (v) => TIME_RE.test(v),
+  work_end: (v) => TIME_RE.test(v),
+  work_days: (v) => /^([1-7](,[1-7])*)?$/.test(v),
+  work_colors: (v) => HEX_LIST.test(v),
+  work_keywords: (v) => v.length <= 500,
 };
 export async function getUserSettings(env) {
   const { results } = await env.DB.prepare("SELECT key, value FROM settings WHERE key LIKE 'u.%'").all();
@@ -42,10 +58,11 @@ export async function getUserSettings(env) {
   return out;
 }
 export async function updateUserSettings(env, patch) {
-  for (const [k, v] of Object.entries(patch || {})) {
+  for (let [k, v] of Object.entries(patch || {})) {
     if (!(k in USER_SETTINGS)) continue;
-    if (k === 'p1_mail_time' && !TIME_RE.test(v)) throw new InputError('Ungültige Uhrzeit');
-    if (k !== 'p1_mail_time' && !Number.isFinite(Number(v))) throw new InputError('Ungültiger Wert');
+    v = String(v ?? '').trim();
+    const rule = SETTING_RULES[k];
+    if (rule ? !rule(v) : !Number.isFinite(Number(v))) throw new InputError('Ungültiger Wert für ' + k);
     await setSetting(env, 'u.' + k, v);
   }
   return getUserSettings(env);
@@ -372,7 +389,8 @@ async function checkParent(env, id, parentId, isMain, promote) {
   return parentId;
 }
 
-export async function createProject(env, { name, color, parent_id, is_main }, { promote = false } = {}) {
+const normContext = (c) => (c === 'work' || c === 'private' ? c : null);
+export async function createProject(env, { name, color, parent_id, is_main, context }, { promote = false } = {}) {
   name = String(name || '').trim();
   if (!name) throw new InputError('Projektname fehlt');
   const id = uid();
@@ -381,11 +399,11 @@ export async function createProject(env, { name, color, parent_id, is_main }, { 
   const max = await env.DB.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM projects').first();
   let col = /^#[0-9a-f]{6}$/i.test(color || '') ? color : null;
   if (!col && parent) col = (await env.DB.prepare('SELECT color FROM projects WHERE id = ?').bind(parent).first()).color;
-  await env.DB.prepare('INSERT INTO projects (id, name, color, sort, parent_id, is_main) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(id, name.slice(0, 100), col || pickColor(max.s), max.s, parent, main).run();
+  await env.DB.prepare('INSERT INTO projects (id, name, color, sort, parent_id, is_main, context) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, name.slice(0, 100), col || pickColor(max.s), max.s, parent, main, parent ? null : normContext(context)).run();
   return env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
 }
-export async function updateProject(env, id, { name, color, sort, parent_id, is_main }, { promote = false } = {}) {
+export async function updateProject(env, id, { name, color, sort, parent_id, is_main, context }, { promote = false } = {}) {
   const p = await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
   if (!p) throw new InputError('Projekt nicht gefunden');
   if (id === 'inbox' && (parent_id || is_main)) throw new InputError('Der Eingang bleibt ein normales Projekt');
@@ -400,7 +418,8 @@ export async function updateProject(env, id, { name, color, sort, parent_id, is_
     // no longer a main project: its sub-projects become normal projects
     await env.DB.prepare('UPDATE projects SET parent_id = NULL WHERE parent_id = ?').bind(id).run();
   }
-  await env.DB.prepare('UPDATE projects SET name = ?, color = ?, sort = ?, parent_id = ?, is_main = ? WHERE id = ?').bind(n, c, s, parent, main, id).run();
+  const ctx = parent ? null : context !== undefined ? normContext(context) : p.context; // sub-projects inherit from their main project
+  await env.DB.prepare('UPDATE projects SET name = ?, color = ?, sort = ?, parent_id = ?, is_main = ?, context = ? WHERE id = ?').bind(n, c, s, parent, main, ctx, id).run();
   return env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
 }
 /** Deletes a project including its sub-projects and all their tasks. */
