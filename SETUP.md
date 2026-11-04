@@ -17,17 +17,17 @@ Einmalig ca. 30 Minuten. Danach läuft alles automatisch: Jede Änderung am Code
 
 1. Konto anlegen auf <https://github.com/signup> (falls noch keins vorhanden).
 2. Neues **privates** Repository anlegen: <https://github.com/new>
-   - Name: `todo-app`
+   - Name: `ToDo`
    - Sichtbarkeit: **Private**
    - Sonst nichts ankreuzen → „Create repository“.
-3. GitHub mit Claude verbinden: <https://claude.ai/connect-github> und die Claude-GitHub-App für das Repo `todo-app` installieren.
+3. GitHub mit Claude verbinden: <https://claude.ai/connect-github> und die Claude-GitHub-App für das Repo `ToDo` installieren.
 4. Claude Bescheid geben → Claude lädt den Code hoch.
 
 ## 2. Cloudflare
 
 1. Konto anlegen auf <https://dash.cloudflare.com/sign-up> (kostenloser Plan reicht).
 2. Links **Compute (Workers)** → **Workers & Pages** → **Create** → **Import a repository**.
-3. GitHub verbinden und das Repo `todo-app` auswählen.
+3. GitHub verbinden und das Repo `ToDo` auswählen.
 4. Einstellungen:
    - Project name: `todo`
    - Build command: *(leer lassen)*
