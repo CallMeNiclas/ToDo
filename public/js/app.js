@@ -357,12 +357,18 @@ async function renderTimeline(date, dayTasks) {
   const draw = (data) => {
     if (!box.isConnected) return;
     const evs = data ? eventsOn(data.events, date) : [];
-    const allDay = evs.filter((e) => e.allDay);
-    const timedEv = evs.filter((e) => !e.allDay);
-    const items = [];
-    for (const e of timedEv) {
+    const span = (e) => {
       const s = localDateOf(e.start) < date ? 0 : toMin(timeOf(e.start));
       const en = localDateOf(e.end) > date ? 24 * 60 : toMin(timeOf(e.end));
+      return [s, en];
+    };
+    // timed events that cover the whole day are shown like all-day events
+    const fullDay = (e) => { const [s, en] = span(e); return s === 0 && en >= 24 * 60; };
+    const allDay = evs.filter((e) => e.allDay || fullDay(e));
+    const timedEv = evs.filter((e) => !e.allDay && !fullDay(e));
+    const items = [];
+    for (const e of timedEv) {
+      const [s, en] = span(e);
       items.push({ kind: 'event', s, e: Math.max(en, s + 15), title: e.title, sub: `${timeOf(e.start)}–${timeOf(e.end)}`, color: e.color, url: e.url });
     }
     for (const t of dayTasks.filter((x) => x.due_time)) {
