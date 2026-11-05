@@ -1023,14 +1023,24 @@ async function loadHealth(force) {
   } catch { /* offline: keep cached */ }
   return healthCache;
 }
-// Health Auto Export only runs when iOS lets it – make a stalled sync visible
-const HEALTH_STALE_H = 6;
-function healthStaleHtml(h) {
+// Health Auto Export only runs when iOS lets it – make a stalled sync visible.
+// Daytime (08–22 Uhr) a sync is expected at least every 3 h, at night (phone locked) 6 h.
+const healthStaleLimitH = (d = new Date()) => (d.getHours() >= 8 && d.getHours() < 22 ? 3 : 6);
+function fmtAgo(ms) {
+  const min = Math.max(0, Math.floor(ms / 60000));
+  if (min < 1) return 'gerade eben';
+  if (min < 60) return `vor ${min} Min.`;
+  const h = Math.floor(min / 60);
+  return h < 48 ? `vor ${h} Std.` : `vor ${Math.floor(h / 24)} Tagen`;
+}
+/** "Aktualisiert: 5.11.26, 15:50 · vor 2 Std." plus a warning when the sync is overdue */
+function healthSyncHtml(h) {
   if (!h?.lastSync) return '';
-  const hours = (Date.now() - Date.parse(h.lastSync)) / 3600000;
-  if (!(hours >= HEALTH_STALE_H)) return '';
-  const ago = hours < 48 ? `${Math.floor(hours)} Std.` : `${Math.floor(hours / 24)} Tagen`;
-  return `<div class="health-stale" role="status">⚠️ Health-Daten seit ${ago} nicht aktualisiert<small>Health Auto Export öffnen oder Export manuell starten</small></div>`;
+  const at = new Date(h.lastSync);
+  const ms = Date.now() - at.getTime();
+  const stamp = `${at.getDate()}.${at.getMonth() + 1}.${String(at.getFullYear()).slice(2)}, ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  const stale = ms / 3600000 >= healthStaleLimitH();
+  return `<div class="health-sync${stale ? ' stale' : ''}" role="status">${stale ? '⚠️ ' : ''}Aktualisiert: ${stamp} · ${fmtAgo(ms)}${stale ? '<small>Überfällig – Health Auto Export öffnen oder Export manuell starten</small>' : ''}</div>`;
 }
 let doneStats = store.get('doneStats', null);
 let doneStatsAt = 0;
@@ -1149,7 +1159,7 @@ function viewDashboard() {
     const items = weekStepItems(h, 7);
     const hits = items.filter((i) => i.hit).length;
     fill('steps', `<div class="dcard-head"><h2>${icon('steps')}Schritte</h2>${link('#/health', 'Details')}</div>
-      ${healthStaleHtml(h)}
+      ${healthSyncHtml(h)}
       <div class="steps-main">${ringSvg(steps, h.goal, 116, 12, steps >= h.goal ? 'var(--ok)' : 'var(--accent)')}
         <div><div class="big-num">${fmtNum(steps)}</div><div class="muted">von ${fmtNum(h.goal)} · ${Math.round((steps / h.goal) * 100)}%</div>
         <div class="muted">${steps >= h.goal ? '🎉 Ziel erreicht' : `noch ${fmtNum(h.goal - steps)}`}</div></div></div>
@@ -1344,7 +1354,7 @@ async function viewHealth() {
       const latest = (m) => { for (let i = days.length - 1; i >= 0; i--) if (days[i][m] != null) return { v: days[i][m], date: days[i].date }; return null; };
       const extras = [['active_energy', 'Aktive Energie', (v) => fmtNum(v) + ' kcal'], ['apple_exercise_time', 'Trainingsminuten', (v) => fmtNum(v) + ' Min.'], ['walking_running_distance', 'Strecke', (v) => v.toFixed(1).replace('.', ',') + ' km'], ['resting_heart_rate', 'Ruhepuls', (v) => fmtNum(v) + ' bpm'], ['heart_rate_variability', 'HRV', (v) => fmtNum(v) + ' ms'], ['weight_body_mass', 'Gewicht', (v) => v.toFixed(1).replace('.', ',') + ' kg']]
         .map(([m, l, f]) => { const x = latest(m); return x ? `<div class="metric"><div class="muted">${l}</div><div class="metric-v">${f(x.v)}</div><div class="muted small">${x.date === h.today ? 'heute' : relDate(x.date, h.today)}</div></div>` : ''; }).join('');
-      html += `${healthStaleHtml(h)}<div class="dash">
+      html += `${healthSyncHtml(h)}<div class="dash">
         <section class="dcard"><div class="dcard-head"><h2>${icon('steps')}Schritte heute</h2></div>
           <div class="steps-main">${ringSvg(d.step_count || 0, h.goal, 130, 13, (d.step_count || 0) >= h.goal ? 'var(--ok)' : 'var(--accent)')}<div><div class="big-num">${fmtNum(d.step_count || 0)}</div><div class="muted">Ziel ${fmtNum(h.goal)}</div></div></div>
           <div class="row-goal"><label>Tagesziel</label><input type="number" min="1000" step="500" value="${h.goal}" data-setting="step_goal" inputmode="numeric"></div></section>
@@ -1353,8 +1363,7 @@ async function viewHealth() {
         <section class="dcard"><div class="dcard-head"><h2>${icon('moon')}Schlaf · 14 Nächte</h2></div>${barsSvg(sleepItems, { height: 140, color: '#6366f1', hitColor: '#4338ca', fmt: fmtHours })}
           <div class="muted center">dunkel = mind. 7 Std.</div></section>
         ${extras ? `<section class="dcard"><div class="dcard-head"><h2>${icon('heart')}Weitere Werte</h2></div><div class="metrics">${extras}</div></section>` : ''}
-      </div>
-      <p class="muted center small">Zuletzt synchronisiert: ${fmtSync(h.lastSync)}</p>`;
+      </div>`;
     } else {
       html += `<div class="panel" style="padding:18px 20px"><h2 style="margin:0 0 6px;font-size:17px">Noch keine Daten</h2><p class="muted">Richte „Health Auto Export“ auf dem iPhone ein (Anleitung unten). Danach erscheinen hier Schritte, Schlaf und mehr.</p></div>`;
     }

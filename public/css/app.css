@@ -881,7 +881,8 @@ body[data-bg="photo"][data-view="today"] :is(.stat, .panel) { background: color-
   .sync.ok { width: 34px !important; height: 34px !important; }
 }
 
-/* ---------- health sync stalled ---------- */
-.health-stale { margin: 4px 0 10px; padding: 9px 12px; border-radius: 10px; font-size: 14px; font-weight: 600;
-  background: color-mix(in srgb, var(--warn, #f59e0b) 16%, transparent); color: var(--warn, #d97706); }
-.health-stale small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+/* ---------- health sync status ---------- */
+.health-sync { margin: 2px 0 10px; font-size: 13px; color: var(--muted); }
+.health-sync.stale { padding: 9px 12px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  background: color-mix(in srgb, #f59e0b 16%, transparent); color: #d97706; }
+.health-sync small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
