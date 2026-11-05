@@ -4,7 +4,7 @@ import { pushAll } from './notify.js';
 
 const nowIso = () => new Date().toISOString();
 
-function view(s) {
+export function focusView(s) {
   if (!s) return null;
   const now = Date.now();
   const pausedNow = s.paused_at ? Math.floor((now - Date.parse(s.paused_at)) / 1000) : 0;
@@ -13,7 +13,7 @@ function view(s) {
 }
 
 export async function activeFocus(env) {
-  return view(await env.DB.prepare('SELECT * FROM focus_sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1').first());
+  return focusView(await env.DB.prepare('SELECT * FROM focus_sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1').first());
 }
 
 export async function startFocus(env, { task_id, minutes }) {
@@ -50,7 +50,7 @@ export async function extendFocus(env, minutes) {
 export async function stopFocus(env) {
   const s = await env.DB.prepare('SELECT * FROM focus_sessions WHERE ended_at IS NULL LIMIT 1').first();
   if (!s) return null;
-  const v = view(s);
+  const v = focusView(s);
   await env.DB.prepare('UPDATE focus_sessions SET ended_at = ?, paused_at = NULL, actual_sec = ? WHERE id = ?').bind(nowIso(), v.elapsed_sec, s.id).run();
   if (s.task_id) await env.DB.prepare('UPDATE tasks SET focus_sec = focus_sec + ? WHERE id = ?').bind(v.elapsed_sec, s.task_id).run();
   return { ...v, ended: true };
@@ -60,7 +60,7 @@ export async function stopFocus(env) {
 export async function checkFocus(env) {
   const s = await env.DB.prepare('SELECT * FROM focus_sessions WHERE ended_at IS NULL AND paused_at IS NULL LIMIT 1').first();
   if (!s) return;
-  const v = view(s);
+  const v = focusView(s);
   const key = 'focus_notified_' + s.id;
   if (v.remaining_sec > 0) return;
   const done = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first();

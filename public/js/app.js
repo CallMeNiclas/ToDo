@@ -76,7 +76,14 @@ function setOnline(on) {
 // ---------------------------------------------------------------- api
 // 502/503/504 come from Cloudflare itself (worker briefly unavailable), not from our code
 const TRANSIENT = new Set([502, 503, 504]);
-async function api(path, { method = 'GET', body } = {}) {
+// changes in flight: a refresh that overlaps one would bring back the old state (e.g. a just-checked task)
+const mut = { inflight: 0, seq: 0 };
+async function api(path, opts = {}) {
+  if ((opts.method || 'GET') === 'GET') return apiRaw(path, opts);
+  mut.inflight++; mut.seq++;
+  try { return await apiRaw(path, opts); } finally { mut.inflight--; mut.seq++; }
+}
+async function apiRaw(path, { method = 'GET', body } = {}) {
   let res;
   for (let attempt = 0; ; attempt++) {
     try {
@@ -123,14 +130,32 @@ function applyBootstrap(b) {
   for (const q of queue) if (q.op === 'complete') S.tasks = S.tasks.filter((t) => t.id !== q.id && t.parent_id !== q.id);
 }
 
-function markSynced(b) {
+// signature of the server state without the ticking focus timer – unchanged data means no re-render
+let lastSig = '';
+const sigOf = (b) => JSON.stringify({ ...b, focus: b.focus ? [b.focus.id, b.focus.paused, b.focus.planned_min] : null });
+
+function markSynced(b, sig = sigOf(b)) {
   net.lastSync = new Date().toISOString();
   store.set('lastSync', net.lastSync);
-  store.set('bootstrap', b);
+  if (sig !== lastSig) store.set('bootstrap', b);
+  lastSig = sig;
   renderSync();
 }
 
+const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
 async function boot() {
+  // instant start: show the last known state right away, fetch fresh data in the background
+  const cached = store.get('bootstrap', null);
+  if (cached && store.get('lastSync', null)) {
+    applyBootstrap(cached);
+    S.today = localToday();
+    if (cached.today !== S.today) S.cal.clear();
+    lastSig = sigOf(cached);
+    start();
+    refresh();
+    return;
+  }
   try {
     const b = await api('/bootstrap');
     applyBootstrap(b);
@@ -140,14 +165,16 @@ async function boot() {
     const cached = store.get('bootstrap', null);
     if (e instanceof OfflineError && cached) {
       applyBootstrap(cached);
-      // the cached "today" may be stale
-      const d = new Date();
-      S.today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      S.today = localToday(); // the cached "today" may be stale
     } else {
       document.body.innerHTML = `<div class="login"><div class="login-card"><h1>${e instanceof OfflineError ? 'Offline' : 'Fehler'}</h1><p>${esc(e instanceof OfflineError ? 'Server nicht erreichbar und noch keine gespeicherten Daten auf diesem Gerät.' : e.message)}</p><a class="btn" href="/">Neu laden</a></div></div>`;
       return;
     }
   }
+  start();
+}
+
+function start() {
   $('#login').hidden = true;
   $('#app').hidden = false;
   for (const [k, v] of Object.entries(store.get('cal', {}))) S.cal.set(k, { at: 0, data: v });
@@ -169,10 +196,19 @@ async function refresh() {
   refreshing = true;
   try {
     if (queue.length) await sync({ silent: true });
+    const seq = mut.seq;
     const b = await api('/bootstrap');
+    if (mut.inflight || mut.seq !== seq) { setTimeout(refresh, 1500); return; } // stale – try again shortly
+    const sig = sigOf(b);
+    if (sig === lastSig && !queue.length) {
+      // nothing changed – only keep the focus timer exact, skip the full re-render
+      S.focus = b.focus; S.focusAt = Date.now();
+      markSynced(b, sig);
+      return;
+    }
     const dayChanged = b.today !== S.today;
     applyBootstrap(b);
-    markSynced(b);
+    markSynced(b, sig);
     if (dayChanged) S.cal.clear();
     const typing = document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
     if (!typing) { render(); if (S.openId) renderDrawer(); }
@@ -476,6 +512,7 @@ function go(hash) {
 
 // ---------------------------------------------------------------- render
 function render() {
+  subCounts = null;
   renderNav();
   const r = S.route;
   $('#top-actions').innerHTML = '';
@@ -597,6 +634,13 @@ function deadlineInfo(d) {
   return { days, text, cls: days < 0 ? 'overdue' : days <= 2 ? 'soon' : '' };
 }
 
+// subtask counts, built once per render instead of scanning all tasks for every row
+let subCounts = null;
+function subCount(id) {
+  if (!subCounts) { subCounts = new Map(); for (const x of S.tasks) if (x.parent_id) subCounts.set(x.parent_id, (subCounts.get(x.parent_id) || 0) + 1); }
+  return subCounts.get(id) || 0;
+}
+
 function taskRow(t, { showProject = true, showDate = true, sub = false, showParent = true } = {}) {
   const meta = [];
   if (showDate && t.due_date) meta.push(`<span class="${dueClass(t)}">${icon('cal')}${relDate(t.due_date, S.today)}${t.due_time ? ' ' + t.due_time : ''}</span>`);
@@ -605,7 +649,7 @@ function taskRow(t, { showProject = true, showDate = true, sub = false, showPare
   if (t.duration_min) meta.push(`<span>${icon('timer')}${fmtDuration(t.duration_min)}</span>`);
   if (t.recurrence) meta.push(`<span title="${esc(recurrenceLabel(t.recurrence))}">${icon('repeat')}${S.streaks?.[t.id] >= 2 ? `<b class="streak">🔥${S.streaks[t.id]}</b>` : ''}</span>`);
   if (S.focus?.task_id === t.id) meta.push(`<span class="focus-on">${icon('timer')}Fokus läuft</span>`);
-  const subs = open().filter((s) => s.parent_id === t.id).length;
+  const subs = subCount(t.id);
   if (subs) meta.push(`<span>${icon('sub')}${subs}</span>`);
   if (t.place_id) meta.push(`<span>${icon('pin')}${esc(S.places.find((p) => p.id === t.place_id)?.name || '')}</span>`);
   for (const l of t.labels) meta.push(`<span class="label">@${esc(l)}</span>`);
@@ -1569,6 +1613,8 @@ function copy(text) {
 }
 
 // ---------------------------------------------------------------- mutations
+const taskSig = (t) => (t ? JSON.stringify(Object.keys(t).filter((k) => k !== 'updated_at' && k !== '_pending').sort().map((k) => [k, t[k]])) : '');
+
 function upsert(task) {
   const i = S.tasks.findIndex((t) => t.id === task.id);
   if (task.completed_at) { if (i >= 0) S.tasks.splice(i, 1); return; }
@@ -1593,19 +1639,30 @@ async function saveTask(id, patch, { silent = false } = {}) {
     if (!silent) { render(); if (S.openId === id) renderDrawer(); }
   }
   try {
+    const before = taskSig(byId(id));
     const t = await api('/tasks/' + id, { method: 'PATCH', body: patch });
     upsert(t);
     if (patch.project_id) {
       // children follow parent
       for (const c of S.tasks.filter((x) => x.parent_id === id)) c.project_id = patch.project_id;
     }
-    if (!silent) { render(); if (S.openId === id) renderDrawer(); }
+    // the optimistic render usually already shows the result – only redraw when the server changed something
+    const same = !patch.project_id && before === taskSig(byId(id));
+    if (!silent && !same) { render(); if (S.openId === id) renderDrawer(); }
     return t;
   } catch (e) {
     if (prev && cur) { const i = S.tasks.indexOf(cur); if (i >= 0) S.tasks[i] = prev; render(); if (S.openId === id) renderDrawer(); }
     toast(e.message);
     throw e;
   }
+}
+
+// picker wheels fire many change events – send only the last value
+const saveTimers = new Map();
+function debouncedSave(id, patch) {
+  const key = id + Object.keys(patch).join();
+  clearTimeout(saveTimers.get(key));
+  saveTimers.set(key, setTimeout(() => { saveTimers.delete(key); saveTask(id, patch).catch(() => {}); }, 500));
 }
 
 function localTask(id, input) {
@@ -1763,7 +1820,18 @@ const REMINDER_PRESETS = [[0, 'Zur Fälligkeit'], [5, '5 Min. vorher'], [15, '15
 const reminderLabel = (r) => r.at ? `${relDate(r.at.slice(0, 10), S.today)} ${r.at.slice(11, 16)}` : (REMINDER_PRESETS.find((p) => p[0] === r.before)?.[1] || `${r.before} Min. vorher`);
 const DURATIONS = [15, 30, 45, 60, 90, 120, 180, 240];
 
+// Re-rendering the drawer replaces its inputs – that would close an open date/time picker
+// (iOS fires "change" while the wheel is still spinning). Defer until focus leaves the field.
+let drawerDeferred = false;
+const PICKER = 'input[type=date], input[type=time], input[type=datetime-local]';
 function renderDrawer() {
+  const a = document.activeElement;
+  if (a && a.matches?.(PICKER) && $('#drawer-panel')?.contains(a)) { drawerDeferred = true; return; }
+  drawerDeferred = false;
+  renderDrawerNow();
+}
+function renderDrawerNow() {
+  subCounts = null;
   const t = S.openId && (byId(S.openId) || (drawerTask?.id === S.openId ? drawerTask : null));
   if (!t) return;
   drawerTask = t;
@@ -1892,6 +1960,7 @@ function bindDrawer() {
     if (e.target.id === 'd-title' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
     if (e.target.id === 'label-input' && e.key === 'Enter') { e.preventDefault(); addLabel(e.target.value); }
   });
+  panel.addEventListener('focusout', () => setTimeout(() => { if (drawerDeferred) renderDrawer(); }, 0));
   panel.addEventListener('change', async (e) => {
     const t = drawerTask;
     if (!t) return;
@@ -1938,7 +2007,8 @@ function bindDrawer() {
       if (!S.places.find((x) => x.id === pl.id)) S.places.push(pl);
       return saveTask(t.id, { place_id: pl.id, place_event: 'arrive' });
     }
-    if (f === 'due_date') return saveTask(t.id, v ? { due_date: v } : { due_date: null, recurrence: null });
+    if (f === 'due_date') return debouncedSave(t.id, v ? { due_date: v } : { due_date: null, recurrence: null });
+    if (f === 'due_time' || f === 'deadline') return debouncedSave(t.id, { [f]: v || null });
     return saveTask(t.id, { [f]: v || null });
   });
   panel.addEventListener('submit', async (e) => {

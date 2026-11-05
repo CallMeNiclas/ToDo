@@ -27,11 +27,14 @@ function scheduleState(s, tz, now) {
   return { scheduled: last ? last.mode : 'private', lastBoundary: last ? last.at : 0, nextBoundary: next || null };
 }
 
-export async function computeMode(env, now = new Date()) {
+/** pre: optional {settings, holiday, override} (raw setting strings) already loaded by the caller */
+export async function computeMode(env, now = new Date(), pre) {
   const tz = env.TIMEZONE;
-  const s = await getUserSettings(env);
-  const holiday = JSON.parse((await getSetting(env, 'holiday')) || 'null');
-  const override = JSON.parse((await getSetting(env, 'mode_override')) || 'null');
+  const [s, holidayRaw, overrideRaw] = pre
+    ? [pre.settings, pre.holiday, pre.override]
+    : await Promise.all([getUserSettings(env), getSetting(env, 'holiday'), getSetting(env, 'mode_override')]);
+  const holiday = JSON.parse(holidayRaw || 'null');
+  const override = JSON.parse(overrideRaw || 'null');
   const today = localNow(tz, now).date;
   const sched = scheduleState(s, tz, now);
   const base = { holiday, schedule: !!s.work_schedule, next: sched.nextBoundary ? { at: new Date(sched.nextBoundary.at).toISOString(), mode: sched.nextBoundary.mode } : null };

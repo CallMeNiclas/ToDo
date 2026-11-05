@@ -50,8 +50,13 @@ const SETTING_RULES = {
 };
 export async function getUserSettings(env) {
   const { results } = await env.DB.prepare("SELECT key, value FROM settings WHERE key LIKE 'u.%'").all();
+  return userSettingsFrom(results);
+}
+/** settings rows (any keys) -> user settings with defaults */
+export function userSettingsFrom(rows) {
   const out = { ...USER_SETTINGS };
-  for (const r of results) {
+  for (const r of rows) {
+    if (!r.key.startsWith('u.')) continue;
     const k = r.key.slice(2);
     if (k in out) out[k] = typeof USER_SETTINGS[k] === 'number' ? Number(r.value) : r.value;
   }

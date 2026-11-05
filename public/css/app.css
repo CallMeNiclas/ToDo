@@ -186,6 +186,8 @@ textarea { resize: vertical; }
 .task {
   display: flex; gap: 12px; padding: 9px 16px; align-items: flex-start; cursor: pointer; position: relative;
   transition: background .12s, opacity .25s, transform .25s;
+  /* rows outside the screen are not laid out or painted – long lists stay smooth */
+  content-visibility: auto; contain-intrinsic-size: auto 48px;
 }
 .task:hover { background: var(--surface-2); }
 .task.done-anim { opacity: 0; transform: translateX(12px); }
@@ -737,7 +739,7 @@ body[data-mode="holiday"] .topbar { box-shadow: inset 0 -2px 0 color-mix(in srgb
 body[data-bg="photo"] #watermark { display: none; }
 body[data-bg="photo"][data-view="dashboard"] #watermark, body[data-bg="photo"][data-view="today"] #watermark {
   display: block; z-index: 0; opacity: 1; background-size: cover; background-position: center 35%;
-  filter: saturate(.9);
+  filter: saturate(.9); transform: translateZ(0); /* own GPU layer – scrolling never repaints the photo */
 }
 body[data-bg="photo"][data-view="dashboard"] #watermark::after, body[data-bg="photo"][data-view="today"] #watermark::after {
   content: ''; position: absolute; inset: 0;
@@ -745,10 +747,11 @@ body[data-bg="photo"][data-view="dashboard"] #watermark::after, body[data-bg="ph
 }
 body[data-bg="logo"]:not([data-view="dashboard"]):not([data-view="today"]) #watermark { display: none; }
 body[data-bg="photo"] .main { position: relative; z-index: 1; }
+/* tiles are translucent without a live backdrop-filter – that would be recomputed for every tile
+   on every scrolled frame (main cause of scroll jank on the photo views) */
 body[data-bg="photo"][data-view="dashboard"] :is(.dcard, .stat, .panel),
 body[data-bg="photo"][data-view="today"] :is(.stat, .panel) {
   background: color-mix(in srgb, var(--surface) 78%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
 }
 body[data-bg="photo"][data-view="dashboard"] .dc-stats { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body[data-bg="photo"][data-view="today"] .hour span { background: transparent; }
@@ -767,7 +770,7 @@ body[data-bg="photo"][data-view="dashboard"] #watermark::after, body[data-bg="ph
   }
 }
 body[data-bg="photo"][data-view="dashboard"] :is(.dcard, .stat, .panel),
-body[data-bg="photo"][data-view="today"] :is(.stat, .panel) { background: color-mix(in srgb, var(--surface) 72%, transparent); }
+body[data-bg="photo"][data-view="today"] :is(.stat, .panel) { background: color-mix(in srgb, var(--surface) 80%, transparent); }
 
 /* ---------- focus timer ---------- */
 .focus-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); color: var(--fg); border-radius: 999px; padding: 5px 11px; font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; }

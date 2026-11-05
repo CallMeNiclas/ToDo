@@ -35,13 +35,20 @@ function occurrencesBack(rule, due, fromDate) {
   return out;
 }
 
-export async function habits(env, { days = 84 } = {}) {
+/** completions needed for streaks (only habit tasks) – exported so bootstrap can batch it */
+export function habitCompletionsStmt(env) {
+  return env.DB.prepare('SELECT c.task_id, c.completed_at FROM completions c JOIN tasks t ON t.id = c.task_id WHERE t.habit = 1 AND c.completed_at >= ?')
+    .bind(new Date(Date.now() - 410 * 86400000).toISOString());
+}
+
+/** pre: optional {tasks, completions} already loaded by the caller */
+export async function habits(env, { days = 84, pre } = {}) {
   const tz = env.TIMEZONE;
   const today = localNow(tz).date;
   const from = addDays(today, -400);
-  const tasks = (await listOpenTasks(env)).filter((t) => t.habit && t.recurrence && t.due_date);
+  const tasks = (pre?.tasks || await listOpenTasks(env)).filter((t) => t.habit && t.recurrence && t.due_date);
   if (!tasks.length) return { today, habits: [] };
-  const { results } = await env.DB.prepare('SELECT task_id, completed_at FROM completions WHERE completed_at >= ?').bind(new Date(Date.now() - 410 * 86400000).toISOString()).all();
+  const results = pre?.completions || (await habitCompletionsStmt(env).all()).results;
   const byTask = new Map();
   for (const r of results) {
     const d = localNow(tz, new Date(r.completed_at)).date;

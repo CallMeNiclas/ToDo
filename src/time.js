@@ -1,12 +1,20 @@
 // Time zone helpers. All task dates/times are stored as local (owner's zone) values;
 // notification instants are stored as UTC ISO strings.
 
+// Building an Intl.DateTimeFormat is expensive (zone data lookup) – build one per zone and reuse it.
+const FMT = new Map();
 function parts(date, tz) {
-  const f = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short',
-  });
-  return Object.fromEntries(f.formatToParts(date).map((p) => [p.type, p.value]));
+  let f = FMT.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short',
+    });
+    FMT.set(tz, f);
+  }
+  const out = {};
+  for (const p of f.formatToParts(date)) out[p.type] = p.value;
+  return out;
 }
 
 function offsetMin(date, tz) {

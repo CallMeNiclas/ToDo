@@ -31,7 +31,7 @@ Wenn ein neuer Chat startet: diese Datei lesen, dann `README.md` / `SETUP.md` nu
 | `public/js/app.js` | gesamte Oberfläche |
 | `public/js/parse.js` | Schnelleingabe-Parser (Deutsch, auch gesprochen) |
 | `public/css/app.css` | Styles (Touch-Größen über `@media (pointer: coarse)`) |
-| `public/sw.js` | Service Worker (Offline-Shell, Push). Bei UI-Änderungen `todo-shell-vNN` hochzählen |
+| `public/sw.js` | Service Worker (Stale-while-revalidate: App startet aus dem Cache, neue Version greift ab dem nächsten Start; Push). Bei UI-Änderungen `todo-shell-vNN` hochzählen |
 | `migrations/` | D1-Schema, fortlaufend nummeriert |
 
 ## Features (Stand)
@@ -45,6 +45,14 @@ Apple Health (Schritte/Ziel, Schlaf, weitere Werte), Spracheingabe, anpassbare M
 ## Nics Daten
 - Projekte: `🛋️fundus7` (Hauptprojekt, Bereich Arbeit) mit `☑️To-Do‘s` und `🔁 W. To-Do’s`; `🫡Nic` (Privat)
 - Geräte: iPhone 18 Pro Max, iPad Pro M4 13", Windows-PC. Große Touch-Ziele gewünscht, kein Zoomen.
+
+## Performance-Regeln
+- App startet sofort aus dem lokalen Stand (`bootstrap` in localStorage), frische Daten kommen im Hintergrund; unveränderte Daten lösen kein Neuzeichnen aus
+- `/api/bootstrap` = ein einziger `DB.batch` – neue Startdaten dort mit hineinnehmen, keine Einzelabfragen
+- Kein `new Intl.DateTimeFormat` in Schleifen (Worker-CPU-Limit → 503); `time.js` cached den Formatierer
+- Kein `backdrop-filter` auf vielen Kacheln (Scroll-Ruckeln), Aufgabenzeilen haben `content-visibility: auto`
+- Drawer wird nicht neu gezeichnet, solange ein Datum/Uhrzeit-Feld fokussiert ist (sonst schließt der iOS-Picker)
+- Refresh verwirft Ergebnisse, die sich mit laufenden Änderungen überschneiden (`mut` in app.js)
 
 ## Arbeitsweise
 - Lokal testen: `npx wrangler dev` mit `.dev.vars` (`DEV_LOGIN=1`), Login über `/auth/dev`; Screenshots mit Playwright (Skripte in `scripts/`)

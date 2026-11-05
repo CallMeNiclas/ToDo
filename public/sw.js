@@ -1,18 +1,21 @@
 // Service worker: offline app shell, push notifications, notification clicks.
-const CACHE = 'todo-shell-v22';
-const SHELL = ['/', '/index.html', '/css/app.css', '/js/app.js', '/js/parse.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
+const CACHE = 'todo-shell-v24';
+const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/parse.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
+  // cache: 'reload' bypasses the HTTP cache so a new version really gets the new files
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).catch(() => {}).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+    if (self.registration.navigationPreload) await self.registration.navigationPreload.enable().catch(() => {});
     await self.clients.claim();
   })());
 });
 
-// Network first (always fresh when online), cache as fallback when offline.
+// Stale-while-revalidate: the app shell comes straight from the cache (instant start, also offline),
+// a fresh copy is fetched in the background and used from the next start on.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
@@ -20,19 +23,21 @@ self.addEventListener('fetch', (event) => {
   if (/^\/(api|auth|mcp|authorize|oauth|hooks|\.well-known)(\/|$)/.test(url.pathname)) return;
   const isPage = req.mode === 'navigate' && (url.pathname === '/' || url.pathname === '/index.html');
   if (req.mode === 'navigate' && !isPage) return;
+  const cacheable = isPage || SHELL.includes(url.pathname) || url.pathname.startsWith('/icons/');
+  if (!cacheable) return;
+  const key = isPage ? '/' : url.pathname;
   event.respondWith((async () => {
-    try {
-      const res = await fetch(req);
-      if (res.ok && (isPage || SHELL.includes(url.pathname) || url.pathname.startsWith('/icons/'))) {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(isPage ? '/index.html' : req, copy));
-      }
+    const cache = await caches.open(CACHE);
+    let cached = await cache.match(key, { ignoreSearch: true });
+    // a response that went through a redirect must not answer a navigation
+    if (cached?.redirected) cached = new Response(await cached.blob(), { status: cached.status, headers: cached.headers });
+    const fresh = (async () => {
+      const res = (isPage && (await event.preloadResponse)) || (await fetch(req));
+      if (res.ok && !res.redirected) await cache.put(key, res.clone());
       return res;
-    } catch (err) {
-      const cached = await caches.match(isPage ? '/index.html' : req, { ignoreSearch: true });
-      if (cached) return cached;
-      throw err;
-    }
+    })();
+    if (cached) { event.waitUntil(fresh.catch(() => {})); return cached; }
+    return fresh;
   })());
 });
 

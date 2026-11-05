@@ -6,8 +6,8 @@ import { localNow, addDays, zonedToUtc } from './time.js';
 import { b64url } from './push.js';
 import { healthSummary } from './health.js';
 import { computeMode, setMode, setHoliday } from './mode.js';
-import { activeFocus, startFocus, pauseFocus, stopFocus, extendFocus } from './focus.js';
-import { habits } from './habits.js';
+import { activeFocus, focusView, startFocus, pauseFocus, stopFocus, extendFocus } from './focus.js';
+import { habits, habitCompletionsStmt } from './habits.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
@@ -29,12 +29,29 @@ export async function handleApi(request, env) {
     if (path === '/bootstrap' && method === 'GET') {
       const today = localNow(env.TIMEZONE).date;
       const startOfToday = zonedToUtc(today, '00:00', env.TIMEZONE).toISOString();
-      const [projects, tasks, places, settings, doneToday, vapid, mode, focus, hab, kv] = await Promise.all([
-        T.listProjects(env), T.listOpenTasks(env), T.listPlaces(env), T.getUserSettings(env),
-        T.completionsSince(env, startOfToday), getVapid(env), computeMode(env), activeFocus(env), habits(env, { days: 1 }),
-        env.DB.prepare("SELECT key, value FROM settings WHERE key LIKE 'logo_v_%' OR key LIKE 'logo_style_%' OR key = 'google_refresh_token'").all(),
+      // one round trip to D1 for everything the app needs to start
+      const db = env.DB;
+      const [rProjects, rTasks, rPlaces, rKv, rDone, rFocus, rHab] = await db.batch([
+        db.prepare('SELECT * FROM projects WHERE archived = 0 ORDER BY sort, created_at'),
+        db.prepare('SELECT * FROM tasks WHERE completed_at IS NULL ORDER BY sort, created_at'),
+        db.prepare('SELECT * FROM places ORDER BY name'),
+        db.prepare("SELECT key, value FROM settings WHERE key LIKE 'u.%' OR key LIKE 'logo_v_%' OR key LIKE 'logo_style_%' OR key IN ('google_refresh_token', 'vapid', 'holiday', 'mode_override')"),
+        db.prepare('SELECT COUNT(*) AS n FROM completions WHERE completed_at >= ?').bind(startOfToday),
+        db.prepare('SELECT * FROM focus_sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1'),
+        habitCompletionsStmt(env),
       ]);
-      const sv = Object.fromEntries(kv.results.map((r) => [r.key, r.value]));
+      const projects = rProjects.results;
+      const tasks = rTasks.results.map(T.rowToTask);
+      const places = rPlaces.results;
+      const sv = Object.fromEntries(rKv.results.map((r) => [r.key, r.value]));
+      const settings = T.userSettingsFrom(rKv.results);
+      const doneToday = rDone.results[0]?.n || 0;
+      const vapid = sv.vapid ? JSON.parse(sv.vapid) : await getVapid(env);
+      const [mode, focus, hab] = await Promise.all([
+        computeMode(env, new Date(), { settings, holiday: sv.holiday, override: sv.mode_override }),
+        focusView(rFocus.results[0] || null),
+        habits(env, { days: 1, pre: { tasks, completions: rHab.results } }),
+      ]);
       const modes = ['work', 'private', 'holiday'];
       return json({
         today, timezone: env.TIMEZONE, email: env.OWNER_EMAIL, projects, tasks, places, settings,
