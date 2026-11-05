@@ -178,7 +178,7 @@ function start() {
   $('#login').hidden = true;
   $('#app').hidden = false;
   for (const [k, v] of Object.entries(store.get('cal', {}))) S.cal.set(k, { at: 0, data: v });
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  setupUpdates();
   bindGlobal();
   route();
   renderSync();
@@ -188,6 +188,37 @@ function start() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
   window.addEventListener('online', () => refresh());
   window.addEventListener('offline', () => setOnline(false));
+}
+
+// ---------------------------------------------------------------- app updates
+// iOS keeps the home-screen app in memory – "opening" it only resumes the old page, so new
+// versions would never arrive. Check for a new version on every resume and reload when idle.
+let updateReady = false;
+function appIdle() {
+  const a = document.activeElement;
+  const typing = a && (['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) || a.isContentEditable);
+  return !typing && !S.openId && !$('#quick-add')?.classList.contains('open') && !document.querySelector('.modal.open') && !net.syncing && !mut.inflight && !saveTimers.size;
+}
+function applyUpdate() {
+  if (!updateReady) return;
+  if (appIdle()) location.reload();
+}
+function setupUpdates() {
+  if (!('serviceWorker' in navigator)) return;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('/sw.js').then((reg) => {
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { check(); applyUpdate(); } });
+    setInterval(check, 30 * 60000);
+  }).catch(() => {});
+  // a new service worker took over (it activates right away) → its cache holds the new version
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return; // first install, nothing old to replace
+    updateReady = true;
+    applyUpdate();
+    // otherwise as soon as the user is done (drawer closed, nothing typed)
+    const timer = setInterval(() => { if (appIdle()) { clearInterval(timer); location.reload(); } }, 3000);
+  });
 }
 
 let refreshing = false;
