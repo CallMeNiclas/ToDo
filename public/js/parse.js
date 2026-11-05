@@ -43,6 +43,8 @@ export function parseQuickAdd(text, ctx) {
   const today = ctx.today;
   let s = ' ' + text + ' ';
   const out = { tokens: [] };
+  // token keys the user dismissed in the preview – their words stay in the title
+  const skip = ctx.skip || new Set();
   const take = (re, fn) => {
     const m = s.match(re);
     if (!m) return false;
@@ -56,7 +58,7 @@ export function parseQuickAdd(text, ctx) {
   s = s.replace(/[.,!?](?=\s)/g, (c, i) => (/\d/.test(s[i - 1]) ? c : ' '));
 
   // priority: "p1", "!1", spoken "Priorität eins" / "Prio 1"
-  take(/\s(?:p|!)([1-4])(?=\s)/i, (m) => { out.priority = +m[1]; out.tokens.push({ type: 'priority', label: 'P' + m[1] }); }) ||
+  if (!skip.has('priority')) take(/\s(?:p|!)([1-4])(?=\s)/i, (m) => { out.priority = +m[1]; out.tokens.push({ type: 'priority', label: 'P' + m[1] }); }) ||
   take(/\s(?:mit\s+)?(?:priorität|prio)\s+(eins|zwei|drei|vier|[1-4])(?=\s)/i, (m) => {
     const n = { eins: 1, zwei: 2, drei: 3, vier: 4 }[m[1].toLowerCase()] || +m[1];
     out.priority = n; out.tokens.push({ type: 'priority', label: 'P' + n });
@@ -64,7 +66,7 @@ export function parseQuickAdd(text, ctx) {
   take(/\s(?:ist\s+)?(?:sehr\s+)?(?:wichtig|dringend)(?=\s)/i, () => { out.priority = 1; out.tokens.push({ type: 'priority', label: 'P1' }); });
 
   // spoken project: "Projekt Arbeit", "im Projekt Haus und Garten"
-  if (ctx.projects?.length) {
+  if (ctx.projects?.length && !skip.has('project')) {
     const m = s.match(/\s(?:(?:im|in|ins|zum)\s+)?projekt\s+/i);
     if (m) {
       const rest = s.slice(m.index + m[0].length).toLowerCase();
@@ -80,18 +82,19 @@ export function parseQuickAdd(text, ctx) {
 
   // spoken label: "Label Telefon"
   const spokenLabels = [];
-  while (take(/\s(?:mit\s+)?label\s+([\p{L}\p{N}_-]+)(?=\s)/iu, (m) => { spokenLabels.push(m[1].toLowerCase()); })) { /* loop */ }
+  if (!skip.has('label')) while (take(/\s(?:mit\s+)?label\s+([\p{L}\p{N}_-]+)(?=\s)/iu, (m) => { spokenLabels.push(m[1].toLowerCase()); })) { /* loop */ }
 
   // spoken durations
+  const noDur = skip.has('duration');
   const NUM = { eine: 1, einer: 1, ein: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, zehn: 10, fünfzehn: 15, zwanzig: 20, dreißig: 30, fünfundvierzig: 45 };
-  take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(?:eine\s+)?halbe\s+stunde(?=\s)/i, () => { out.duration_min = 30; }) ||
+  if (!noDur) take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(?:eine\s+)?halbe\s+stunde(?=\s)/i, () => { out.duration_min = 30; }) ||
   take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(?:anderthalb|eineinhalb)\s+stunden?(?=\s)/i, () => { out.duration_min = 90; }) ||
   take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(eine|einer|ein|zwei|drei|vier|fünf|sechs|\d+)\s+stunden?(?=\s)/i, (m) => { out.duration_min = (NUM[m[1].toLowerCase()] || +m[1]) * 60; }) ||
   take(/\s(?:für\s+|dauert\s+(?:ca\.?\s+|etwa\s+|so\s+)?)?(zehn|fünfzehn|zwanzig|dreißig|fünfundvierzig|\d+)\s+minuten(?=\s)/i, (m) => { out.duration_min = NUM[m[1].toLowerCase()] || +m[1]; });
   if (out.duration_min) out.tokens.push({ type: 'duration', label: fmtDuration(out.duration_min) });
 
   // project: "#Name" – match the longest existing project name
-  if (ctx.projects?.length) {
+  if (ctx.projects?.length && !skip.has('project')) {
     const idx = s.indexOf('#');
     if (idx >= 0) {
       const rest = s.slice(idx + 1).toLowerCase();
@@ -107,12 +110,12 @@ export function parseQuickAdd(text, ctx) {
 
   // labels
   const labels = [];
-  while (take(/\s@([\p{L}\p{N}_-]+)(?=\s)/u, (m) => { labels.push(m[1]); })) { /* loop */ }
+  if (!skip.has('label')) while (take(/\s@([\p{L}\p{N}_-]+)(?=\s)/u, (m) => { labels.push(m[1]); })) { /* loop */ }
   labels.push(...spokenLabels);
   if (labels.length) { out.labels = labels; labels.forEach((l) => out.tokens.push({ type: 'label', label: '@' + l })); }
 
   // duration
-  if (!out.duration_min) take(/\s(?:für\s+)?(\d+(?:[.,]\d+)?)\s?(min|minuten|m|h|std|stunden?)(?=\s)/i, (m) => {
+  if (!out.duration_min && !noDur) take(/\s(?:für\s+)?(\d+(?:[.,]\d+)?)\s?(min|minuten|m|h|std|stunden?)(?=\s)/i, (m) => {
     const n = parseFloat(m[1].replace(',', '.'));
     const mins = /^(h|std|stunde|stunden)$/i.test(m[2]) ? Math.round(n * 60) : Math.round(n);
     if (!(mins > 0)) return false;
@@ -123,7 +126,7 @@ export function parseQuickAdd(text, ctx) {
   // recurrence
   let recStart = null;
   const recur = (rule, label, start) => { out.recurrence = rule; recStart = start; out.tokens.push({ type: 'recurrence', label }); };
-  take(/\s(?:jeden\s+tag|täglich|taeglich)(?=\s)/i, () => recur({ freq: 'day' }, 'täglich', today)) ||
+  if (!skip.has('recurrence')) take(/\s(?:jeden\s+tag|täglich|taeglich)(?=\s)/i, () => recur({ freq: 'day' }, 'täglich', today)) ||
   take(/\s(?:jeden\s+werktag|werktags|wochentags)(?=\s)/i, () => recur({ freq: 'week', days: [1, 2, 3, 4, 5] }, 'werktags', nextWeekdayIn(today, [1, 2, 3, 4, 5]))) ||
   take(new RegExp(`\\s(?:jeden|jede[nm]?)\\s+${WD_RE}((?:\\s*(?:,|und|&)\\s*${WD_RE})*)(?=\\s)`, 'i'), (m) => {
     const names = (m[1] + ' ' + (m[2] || '')).toLowerCase().match(new RegExp(WD_RE, 'g'));
@@ -144,7 +147,7 @@ export function parseQuickAdd(text, ctx) {
   take(/\sjeden\s+(\d{1,2})\.(?=\s)/i, (m) => recur({ freq: 'month', day: +m[1] }, `monatlich am ${m[1]}.`, nextMonthDay(today, +m[1])));
 
   // deadline: "bis Freitag", "bis 15.12.", "deadline morgen", "Deadline 3. Dezember"
-  {
+  if (!skip.has('deadline')) {
     const dm = s.match(/\s(?:bis(?:\s+spätestens)?|spätestens|deadline)\s+(?=\S)/i);
     if (dm) {
       const rest = ' ' + s.slice(dm.index + dm[0].length);
@@ -164,7 +167,8 @@ export function parseQuickAdd(text, ctx) {
 
   // date
   let date = null;
-  take(/\s(?:heute|hute)(?=\s)/i, () => { date = today; }) ||
+  const noDate = skip.has('date');
+  if (!noDate) take(/\s(?:heute|hute)(?=\s)/i, () => { date = today; }) ||
   take(/\s(?:übermorgen|uebermorgen)(?=\s)/i, () => { date = addDays(today, 2); }) ||
   take(/\smorgen(?=\s)/i, () => { date = addDays(today, 1); }) ||
   take(/\s(?:nächste|naechste|kommende)\s+woche(?=\s)/i, () => { date = nextWeekday(today, 1, false); }) ||
@@ -193,7 +197,7 @@ export function parseQuickAdd(text, ctx) {
   });
 
   // time
-  take(/\s(?:um\s+)?([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*uhr)?(?=\s)/i, (m) => { out.due_time = `${m[1].padStart(2, '0')}:${m[2]}`; }) ||
+  if (!noDate) take(/\s(?:um\s+)?([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*uhr)?(?=\s)/i, (m) => { out.due_time = `${m[1].padStart(2, '0')}:${m[2]}`; }) ||
   take(/\s(?:um\s+)?([01]?\d|2[0-3])\s*uhr(?=\s)/i, (m) => { out.due_time = `${m[1].padStart(2, '0')}:00`; }) ||
   take(/\sum\s+([01]?\d|2[0-3])(?=\s)/i, (m) => { out.due_time = `${m[1].padStart(2, '0')}:00`; });
 

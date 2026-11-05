@@ -320,7 +320,7 @@ textarea { resize: vertical; }
 .qa-card input { width: 100%; border: 0; font-size: 17px; padding: 8px 6px; box-shadow: none; background: transparent; }
 .qa-card textarea { width: 100%; border: 0; font-size: 14px; padding: 2px 6px 8px; box-shadow: none; background: transparent; color: var(--fg-2); resize: none; }
 .qa-tokens { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 6px 10px; min-height: 8px; }
-.qa-tokens .pill { padding-right: 10px; }
+.qa-tokens .pill { padding-right: 3px; }
 .qa-tokens .t-priority { background: color-mix(in srgb, var(--p1) 14%, transparent); color: var(--p1); }
 .qa-tokens .t-date { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .qa-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; flex-wrap: wrap; }
@@ -477,7 +477,7 @@ mark { background: color-mix(in srgb, var(--p2) 30%, transparent); color: inheri
   .qa-card input { font-size: 18px; padding: 12px 6px; }
   .qa-mic { width: 50px; height: 50px; }
   .qa-mic svg { width: 23px; height: 23px; }
-  .qa-tokens .pill { padding: 6px 13px; }
+  .qa-tokens .pill { padding: 4px 4px 4px 13px; }
 
   .search-big input { padding: 15px 0; font-size: 18px; }
   .settings .row { gap: 12px; }

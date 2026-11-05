@@ -74,18 +74,28 @@ function setOnline(on) {
 }
 
 // ---------------------------------------------------------------- api
+// 502/503/504 come from Cloudflare itself (worker briefly unavailable), not from our code
+const TRANSIENT = new Set([502, 503, 504]);
 async function api(path, { method = 'GET', body } = {}) {
   let res;
-  try {
-    res = await fetch('/api' + path, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'same-origin',
-    });
-  } catch {
-    setOnline(false);
-    throw new OfflineError('Keine Verbindung');
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch('/api' + path, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: 'same-origin',
+      });
+    } catch {
+      res = null;
+    }
+    if (res && !TRANSIENT.has(res.status)) break;
+    if (attempt >= 2) {
+      // still unavailable: behave like offline (cached data, queued changes)
+      setOnline(false);
+      throw new OfflineError(res ? 'Server kurz nicht erreichbar' : 'Keine Verbindung');
+    }
+    await new Promise((r) => setTimeout(r, 600 * 2 ** attempt));
   }
   setOnline(true);
   if (res.status === 401) { showLogin(); throw new Error('Nicht angemeldet'); }
@@ -134,7 +144,7 @@ async function boot() {
       const d = new Date();
       S.today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     } else {
-      document.body.innerHTML = `<div class="login"><div class="login-card"><h1>${e instanceof OfflineError ? 'Offline' : 'Fehler'}</h1><p>${esc(e instanceof OfflineError ? 'Keine Verbindung und noch keine gespeicherten Daten auf diesem Gerät.' : e.message)}</p><a class="btn" href="/">Neu laden</a></div></div>`;
+      document.body.innerHTML = `<div class="login"><div class="login-card"><h1>${e instanceof OfflineError ? 'Offline' : 'Fehler'}</h1><p>${esc(e instanceof OfflineError ? 'Server nicht erreichbar und noch keine gespeicherten Daten auf diesem Gerät.' : e.message)}</p><a class="btn" href="/">Neu laden</a></div></div>`;
       return;
     }
   }
@@ -1953,8 +1963,10 @@ function addLabel(raw) {
 
 // ---------------------------------------------------------------- quick add
 let qaDefaults = {};
+let qaSkip = new Set();
 function openQuickAdd(defaults = {}) {
-  qaDefaults = defaults;
+  qaDefaults = { ...defaults };
+  qaSkip = new Set();
   $('#quick-add').classList.add('open');
   $('#quick-add').setAttribute('aria-hidden', 'false');
   $('#qa-input').value = '';
@@ -1995,15 +2007,30 @@ function closeQuickAdd() {
   $('#quick-add').setAttribute('aria-hidden', 'true');
 }
 function qaParsed() {
-  return parseQuickAdd($('#qa-input').value, { today: S.today, projects: parseProjects() });
+  return parseQuickAdd($('#qa-input').value, { today: S.today, projects: parseProjects(), skip: qaSkip });
 }
 function renderQaTokens() {
+  if (!$('#qa-input').value.trim()) qaSkip.clear();
   const p = qaParsed();
-  const tokens = [...p.tokens];
-  if (!p.due_date && qaDefaults.due_date) tokens.unshift({ type: 'date', label: relDate(qaDefaults.due_date, S.today) });
-  if (!p.project_id && qaDefaults.project_id && qaDefaults.project_id !== 'inbox') tokens.push({ type: 'project', label: '#' + projectPath(qaDefaults.project_id) });
-  if (qaDefaults.labels) qaDefaults.labels.forEach((l) => tokens.push({ type: 'label', label: '@' + l }));
-  $('#qa-tokens').innerHTML = tokens.map((t) => `<span class="pill t-${t.type}">${esc(t.label)}</span>`).join('');
+  const tokens = p.tokens.map((t) => ({ ...t, key: t.type }));
+  if (!p.due_date && qaDefaults.due_date) tokens.unshift({ type: 'date', label: relDate(qaDefaults.due_date, S.today), key: 'def:due_date' });
+  if (!p.project_id && qaDefaults.project_id && qaDefaults.project_id !== 'inbox') tokens.push({ type: 'project', label: '#' + projectPath(qaDefaults.project_id), key: 'def:project_id' });
+  if (qaDefaults.labels) qaDefaults.labels.forEach((l) => tokens.push({ type: 'label', label: '@' + l, key: 'def:label:' + l }));
+  $('#qa-tokens').innerHTML = tokens.map((t) => `<span class="pill t-${t.type}">${esc(t.label)}<button type="button" data-qa-skip="${esc(t.key)}" aria-label="${esc(t.label)} entfernen" title="Entfernen">${icon('x')}</button></span>`).join('');
+}
+/** removes a recognised token: parsed ones stay as plain text in the title, defaults are dropped */
+function dismissQaToken(key) {
+  if (key === 'def:due_date') delete qaDefaults.due_date;
+  else if (key === 'def:project_id') delete qaDefaults.project_id;
+  else if (key.startsWith('def:label:')) qaDefaults.labels = (qaDefaults.labels || []).filter((l) => l !== key.slice(10));
+  else {
+    qaSkip.add(key);
+    // the user wants no date at all, not the view's default
+    if (key === 'date') delete qaDefaults.due_date;
+    if (key === 'project') delete qaDefaults.project_id;
+  }
+  renderQaTokens();
+  $('#qa-input').focus();
 }
 async function submitQuickAdd(e) {
   e.preventDefault();
@@ -2128,6 +2155,8 @@ function bindGlobal() {
   bindDrawer();
   $('#qa-form').addEventListener('submit', submitQuickAdd);
   $('#qa-input').addEventListener('input', renderQaTokens);
+  $('#qa-tokens').addEventListener('pointerdown', (e) => { if (e.target.closest('[data-qa-skip]')) e.preventDefault(); }); // keep keyboard open
+  $('#qa-tokens').addEventListener('click', (e) => { const b = e.target.closest('[data-qa-skip]'); if (b) dismissQaToken(b.dataset.qaSkip); });
   $('#qa-cancel').addEventListener('click', closeQuickAdd);
   if (!SR) $('#qa-mic').hidden = true;
   $('#qa-mic').addEventListener('click', toggleMic);
