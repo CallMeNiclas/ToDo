@@ -1023,6 +1023,15 @@ async function loadHealth(force) {
   } catch { /* offline: keep cached */ }
   return healthCache;
 }
+// Health Auto Export only runs when iOS lets it – make a stalled sync visible
+const HEALTH_STALE_H = 6;
+function healthStaleHtml(h) {
+  if (!h?.lastSync) return '';
+  const hours = (Date.now() - Date.parse(h.lastSync)) / 3600000;
+  if (!(hours >= HEALTH_STALE_H)) return '';
+  const ago = hours < 48 ? `${Math.floor(hours)} Std.` : `${Math.floor(hours / 24)} Tagen`;
+  return `<div class="health-stale" role="status">⚠️ Health-Daten seit ${ago} nicht aktualisiert<small>Health Auto Export öffnen oder Export manuell starten</small></div>`;
+}
 let doneStats = store.get('doneStats', null);
 let doneStatsAt = 0;
 async function loadDoneStats() {
@@ -1140,6 +1149,7 @@ function viewDashboard() {
     const items = weekStepItems(h, 7);
     const hits = items.filter((i) => i.hit).length;
     fill('steps', `<div class="dcard-head"><h2>${icon('steps')}Schritte</h2>${link('#/health', 'Details')}</div>
+      ${healthStaleHtml(h)}
       <div class="steps-main">${ringSvg(steps, h.goal, 116, 12, steps >= h.goal ? 'var(--ok)' : 'var(--accent)')}
         <div><div class="big-num">${fmtNum(steps)}</div><div class="muted">von ${fmtNum(h.goal)} · ${Math.round((steps / h.goal) * 100)}%</div>
         <div class="muted">${steps >= h.goal ? '🎉 Ziel erreicht' : `noch ${fmtNum(h.goal - steps)}`}</div></div></div>
@@ -1334,7 +1344,7 @@ async function viewHealth() {
       const latest = (m) => { for (let i = days.length - 1; i >= 0; i--) if (days[i][m] != null) return { v: days[i][m], date: days[i].date }; return null; };
       const extras = [['active_energy', 'Aktive Energie', (v) => fmtNum(v) + ' kcal'], ['apple_exercise_time', 'Trainingsminuten', (v) => fmtNum(v) + ' Min.'], ['walking_running_distance', 'Strecke', (v) => v.toFixed(1).replace('.', ',') + ' km'], ['resting_heart_rate', 'Ruhepuls', (v) => fmtNum(v) + ' bpm'], ['heart_rate_variability', 'HRV', (v) => fmtNum(v) + ' ms'], ['weight_body_mass', 'Gewicht', (v) => v.toFixed(1).replace('.', ',') + ' kg']]
         .map(([m, l, f]) => { const x = latest(m); return x ? `<div class="metric"><div class="muted">${l}</div><div class="metric-v">${f(x.v)}</div><div class="muted small">${x.date === h.today ? 'heute' : relDate(x.date, h.today)}</div></div>` : ''; }).join('');
-      html += `<div class="dash">
+      html += `${healthStaleHtml(h)}<div class="dash">
         <section class="dcard"><div class="dcard-head"><h2>${icon('steps')}Schritte heute</h2></div>
           <div class="steps-main">${ringSvg(d.step_count || 0, h.goal, 130, 13, (d.step_count || 0) >= h.goal ? 'var(--ok)' : 'var(--accent)')}<div><div class="big-num">${fmtNum(d.step_count || 0)}</div><div class="muted">Ziel ${fmtNum(h.goal)}</div></div></div>
           <div class="row-goal"><label>Tagesziel</label><input type="number" min="1000" step="500" value="${h.goal}" data-setting="step_goal" inputmode="numeric"></div></section>
