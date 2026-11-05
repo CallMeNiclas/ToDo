@@ -339,11 +339,13 @@ export async function completeTask(env, id) {
     await scheduleNotifications(env, task);
     return { task, recurred: true };
   }
-  await env.DB.prepare('UPDATE tasks SET completed_at = ?, updated_at = ? WHERE id = ?').bind(now, now, id).run();
-  // complete open subtasks too
-  await env.DB.prepare('UPDATE tasks SET completed_at = ?, updated_at = ? WHERE parent_id = ? AND completed_at IS NULL').bind(now, now, id).run();
-  await env.DB.prepare('DELETE FROM notifications WHERE sent_at IS NULL AND task_id IN (SELECT id FROM tasks WHERE id = ? OR parent_id = ?)').bind(id, id).run();
-  return { task: await getTask(env, id), recurred: false };
+  await env.DB.batch([
+    env.DB.prepare('UPDATE tasks SET completed_at = ?, updated_at = ? WHERE id = ?').bind(now, now, id),
+    // complete open subtasks too
+    env.DB.prepare('UPDATE tasks SET completed_at = ?, updated_at = ? WHERE parent_id = ? AND completed_at IS NULL').bind(now, now, id),
+    env.DB.prepare('DELETE FROM notifications WHERE sent_at IS NULL AND task_id IN (SELECT id FROM tasks WHERE id = ? OR parent_id = ?)').bind(id, id),
+  ]);
+  return { task: { ...t, completed_at: now, updated_at: now }, recurred: false };
 }
 
 export async function uncompleteTask(env, id) {

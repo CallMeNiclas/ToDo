@@ -970,7 +970,10 @@ async function loadHealth(force) {
   return healthCache;
 }
 let doneStats = store.get('doneStats', null);
+let doneStatsAt = 0;
 async function loadDoneStats() {
+  if (Date.now() - doneStatsAt < 60000 && doneStats) return doneStats;
+  doneStatsAt = Date.now();
   try { doneStats = await api('/stats/completions?days=7'); store.set('doneStats', doneStats); } catch { /* offline */ }
   return doneStats;
 }
@@ -1127,7 +1130,10 @@ function viewDashboard() {
 
 // ---------------------------------------------------------------- habits
 let habitsCache = store.get('habits', null);
-async function loadHabits() {
+let habitsAt = 0;
+async function loadHabits(force) {
+  if (!force && Date.now() - habitsAt < 60000 && habitsCache) return habitsCache;
+  habitsAt = Date.now();
   try { habitsCache = await api('/habits?days=84'); store.set('habits', habitsCache); } catch { /* offline */ }
   return habitsCache;
 }
@@ -1171,7 +1177,7 @@ async function viewHabits() {
     <p class="muted small center">Grün = erledigt · Rot = verpasst · Grau = nicht fällig. Nachträglich Abhaken zählt, solange es vor dem nächsten Termin passiert.</p>`;
   };
   draw(habitsCache);
-  draw(await loadHabits());
+  draw(await loadHabits(true));
 }
 
 // ---------------------------------------------------------------- focus timer
@@ -1567,6 +1573,15 @@ function offlineBlocked() {
 
 async function saveTask(id, patch, { silent = false } = {}) {
   if (offlineBlocked()) { if (S.openId === id) renderDrawer(); throw new OfflineError('offline'); }
+  // optimistic: show simple changes immediately
+  const cur = byId(id);
+  const prev = cur ? { ...cur } : null;
+  const simple = ['title', 'notes', 'priority', 'due_date', 'due_time', 'duration_min', 'deadline', 'labels', 'project_id', 'habit', 'recurrence'];
+  if (cur && Object.keys(patch).every((k) => simple.includes(k))) {
+    Object.assign(cur, patch);
+    if (patch.due_date === null) { cur.due_time = null; cur.recurrence = null; }
+    if (!silent) { render(); if (S.openId === id) renderDrawer(); }
+  }
   try {
     const t = await api('/tasks/' + id, { method: 'PATCH', body: patch });
     upsert(t);
@@ -1577,6 +1592,7 @@ async function saveTask(id, patch, { silent = false } = {}) {
     if (!silent) { render(); if (S.openId === id) renderDrawer(); }
     return t;
   } catch (e) {
+    if (prev && cur) { const i = S.tasks.indexOf(cur); if (i >= 0) S.tasks[i] = prev; render(); if (S.openId === id) renderDrawer(); }
     toast(e.message);
     throw e;
   }
@@ -1611,11 +1627,35 @@ async function createTask(input) {
   return t;
 }
 
+// client copy of the server's recurrence logic, used to move recurring tasks instantly
+function nextOccurrenceLocal(rule, due, today) {
+  const n = Math.max(1, rule.interval || 1);
+  const step = (d) => {
+    if (rule.freq === 'day') return addDays(d, n);
+    if (rule.freq === 'week') {
+      const days = (rule.days || []).slice().sort();
+      if (!days.length) return addDays(d, 7 * n);
+      const wd = isoWeekday(d);
+      const later = days.find((x) => x > wd);
+      return later ? addDays(d, later - wd) : addDays(d, 7 * (n - 1) + (7 - wd) + days[0]);
+    }
+    const months = rule.freq === 'year' ? 12 * n : n;
+    const [y, m] = d.split('-').map(Number);
+    const day = rule.day || +due.slice(8, 10);
+    const first = new Date(Date.UTC(y, m - 1 + months, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, last))).toISOString().slice(0, 10);
+  };
+  let next = step(due || today);
+  for (let i = 0; next <= today && i < 1000; i++) next = step(next);
+  return next;
+}
+
 async function complete(id) {
   const before = byId(id);
   if (!before) return;
-  const rows = $$(`[data-task="${id}"]`);
-  rows.forEach((r) => r.classList.add('done-anim'));
+  const snapshot = S.tasks.map((t) => ({ ...t }));
+  $$(`[data-task="${id}"]`).forEach((r) => r.classList.add('done-anim'));
   if (!net.online || before._pending) {
     // offline (or not yet uploaded): queue it
     const qi = queue.findIndex((q) => q.op === 'create' && q.id === id);
@@ -1626,37 +1666,42 @@ async function complete(id) {
     if (S.openId === id) closeDrawer();
     renderSync();
     toast(net.online ? 'Erledigt' : 'Erledigt (offline) – wird synchronisiert');
-    setTimeout(render, 220);
+    setTimeout(render, 180);
     if (net.online) sync({ silent: true });
     return;
   }
+  // optimistic: update the UI right away, tell the server in the background
+  const recurring = before.recurrence && before.due_date;
+  if (recurring) {
+    const t = byId(id);
+    t.due_date = nextOccurrenceLocal(before.recurrence, before.due_date, S.today);
+    if (S.streaks && t.habit) S.streaks[id] = (S.streaks[id] || 0) + 1;
+  } else {
+    S.tasks = S.tasks.filter((t) => t.id !== id && t.parent_id !== id);
+    if (S.openId === id) closeDrawer();
+  }
+  S.doneToday++;
+  setTimeout(() => { render(); if (S.openId && S.openId !== id) renderDrawer(); }, 180);
+  let pending = null;
+  const undo = async () => {
+    S.tasks = snapshot; S.doneToday = Math.max(0, S.doneToday - 1); render();
+    await pending?.catch(() => {}); // wait until the server has the completion, then revert it
+    if (recurring) await saveTask(id, { due_date: before.due_date, ...(before.due_time ? { due_time: before.due_time } : {}) }, { silent: true }).catch(() => {});
+    else await api(`/tasks/${id}/uncomplete`, { method: 'POST' }).catch((e) => toast(e.message));
+  };
+  toast(recurring ? `Erledigt · nächstes Mal ${relDate(byId(id).due_date, S.today)}` : 'Erledigt', 'Rückgängig', undo);
   try {
-    const r = await api(`/tasks/${id}/complete`, { method: 'POST' });
-    S.doneToday++;
-    if (r.recurred) {
-      upsert(r.task);
-      toast(`Erledigt · nächstes Mal ${relDate(r.task.due_date, S.today)}`, 'Rückgängig', async () => {
-        await saveTask(id, { due_date: before.due_date, ...(before.due_time ? { due_time: before.due_time } : {}) });
-        S.doneToday = Math.max(0, S.doneToday - 1);
-        render();
-      });
-    } else {
-      const removed = S.tasks.filter((t) => t.id === id || t.parent_id === id);
-      S.tasks = S.tasks.filter((t) => !removed.includes(t));
-      toast('Erledigt', 'Rückgängig', async () => {
-        const t = await api(`/tasks/${id}/uncomplete`, { method: 'POST' });
-        upsert(t);
-        S.doneToday = Math.max(0, S.doneToday - 1);
-        refresh();
-        render();
-      });
-      if (S.openId === id) closeDrawer();
-    }
-    setTimeout(() => { render(); if (S.openId && S.openId !== id) renderDrawer(); }, 220);
+    pending = api(`/tasks/${id}/complete`, { method: 'POST' });
+    const r = await pending;
+    if (r.recurred && byId(id)?.due_date !== before.due_date) upsert(r.task);
   } catch (e) {
-    rows.forEach((x) => x.classList.remove('done-anim'));
-    if (e instanceof OfflineError) return complete(id);
-    toast(e.message);
+    if (e instanceof OfflineError) {
+      queue.push({ op: 'complete', id }); saveQueue(); renderSync();
+      return;
+    }
+    S.tasks = snapshot; S.doneToday = Math.max(0, S.doneToday - 1);
+    render();
+    toast('Abhaken fehlgeschlagen: ' + e.message);
   }
 }
 

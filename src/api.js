@@ -20,23 +20,29 @@ export async function handleApi(request, env) {
   let r;
 
   // remember public origin for links in mails
-  if ((await T.getSetting(env, 'origin')) !== url.origin) await T.setSetting(env, 'origin', url.origin);
+  if (!globalThis.__originSaved) {
+    globalThis.__originSaved = true;
+    if ((await T.getSetting(env, 'origin')) !== url.origin) await T.setSetting(env, 'origin', url.origin);
+  }
 
   try {
     if (path === '/bootstrap' && method === 'GET') {
       const today = localNow(env.TIMEZONE).date;
       const startOfToday = zonedToUtc(today, '00:00', env.TIMEZONE).toISOString();
-      const [projects, tasks, places, settings, doneToday, vapid] = await Promise.all([
+      const [projects, tasks, places, settings, doneToday, vapid, mode, focus, hab, kv] = await Promise.all([
         T.listProjects(env), T.listOpenTasks(env), T.listPlaces(env), T.getUserSettings(env),
-        T.completionsSince(env, startOfToday), getVapid(env),
+        T.completionsSince(env, startOfToday), getVapid(env), computeMode(env), activeFocus(env), habits(env, { days: 1 }),
+        env.DB.prepare("SELECT key, value FROM settings WHERE key LIKE 'logo_v_%' OR key LIKE 'logo_style_%' OR key = 'google_refresh_token'").all(),
       ]);
+      const sv = Object.fromEntries(kv.results.map((r) => [r.key, r.value]));
+      const modes = ['work', 'private', 'holiday'];
       return json({
         today, timezone: env.TIMEZONE, email: env.OWNER_EMAIL, projects, tasks, places, settings,
-        doneToday, vapidPublicKey: vapid.publicKey, mode: await computeMode(env), focus: await activeFocus(env),
-        streaks: Object.fromEntries((await habits(env, { days: 1 })).habits.map((h) => [h.task_id, h.current])),
-        logos: Object.fromEntries(await Promise.all(['work', 'private', 'holiday'].map(async (m) => [m, (await T.getSetting(env, 'logo_v_' + m)) || null]))),
-        logoStyles: Object.fromEntries(await Promise.all(['work', 'private', 'holiday'].map(async (m) => [m, (await T.getSetting(env, 'logo_style_' + m)) || 'logo']))),
-        googleConnected: !!(await T.getSetting(env, 'google_refresh_token')),
+        doneToday, vapidPublicKey: vapid.publicKey, mode, focus,
+        streaks: Object.fromEntries(hab.habits.map((h) => [h.task_id, h.current])),
+        logos: Object.fromEntries(modes.map((m) => [m, sv['logo_v_' + m] || null])),
+        logoStyles: Object.fromEntries(modes.map((m) => [m, sv['logo_style_' + m] || 'logo'])),
+        googleConnected: !!sv.google_refresh_token,
       });
     }
     if (path === '/tasks' && method === 'GET') return json({ tasks: await T.listOpenTasks(env), today: localNow(env.TIMEZONE).date });
