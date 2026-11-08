@@ -221,17 +221,21 @@ function setupUpdates() {
   });
 }
 
-let refreshing = false;
-async function refresh() {
-  if (refreshing) return;
-  refreshing = true;
+let refreshing = null;
+/** force: re-render even when nothing changed (manual "Aktualisieren") */
+function refresh(opts) {
+  if (refreshing) return refreshing;
+  refreshing = doRefresh(opts).finally(() => { refreshing = null; });
+  return refreshing;
+}
+async function doRefresh({ force = false } = {}) {
   try {
     if (queue.length) await sync({ silent: true });
     const seq = mut.seq;
     const b = await api('/bootstrap');
     if (mut.inflight || mut.seq !== seq) { setTimeout(refresh, 1500); return; } // stale – try again shortly
     const sig = sigOf(b);
-    if (sig === lastSig && !queue.length) {
+    if (sig === lastSig && !queue.length && !force) {
       // nothing changed – only keep the focus timer exact, skip the full re-render
       S.focus = b.focus; S.focusAt = Date.now();
       markSynced(b, sig);
@@ -244,7 +248,23 @@ async function refresh() {
     const typing = document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
     if (!typing) { render(); if (S.openId) renderDrawer(); }
     else renderNav();
-  } catch { /* offline – ignore */ } finally { refreshing = false; }
+    return true;
+  } catch { return false; /* offline – ignore */ }
+}
+
+/** "Aktualisieren" in the menu: fetch everything fresh (tasks, calendar, health, streaks) */
+async function manualRefresh() {
+  const btn = $('#refresh-btn');
+  if (btn?.classList.contains('spin')) return;
+  btn?.classList.add('spin');
+  for (const v of S.cal.values()) v.at = 0;
+  if (healthCache) healthCache._at = 0;
+  habitsCache = null; doneStatsAt = 0;
+  if (refreshing) await refreshing;
+  const ok = await refresh({ force: true });
+  btn?.classList.remove('spin');
+  renderSync();
+  toast(ok ? 'Aktualisiert' : 'Server nicht erreichbar – gespeicherter Stand');
 }
 
 /** Sends queued offline changes to the server, in order. */
@@ -297,6 +317,8 @@ function renderSync() {
   el.title = title;
   el.setAttribute('aria-label', title);
   el.innerHTML = `<span class="sync-dot"></span><span class="sync-label">${esc(label)}</span><span class="sync-short">${esc(short)}</span>`;
+  const rt = $('#refresh-time');
+  if (rt) rt.textContent = net.lastSync ? fmtSync(net.lastSync) : '';
 }
 
 // ---------------------------------------------------------------- derived
@@ -592,7 +614,7 @@ function renderNav() {
   $('#nav-labels').innerHTML = labels.map(([l, n]) =>
     `<a href="#/label/${encodeURIComponent(l)}" class="nav-item${active('label', l)}"><span class="hash">@</span><span>${esc(l)}</span><span class="count">${n}</span></a>`).join('');
 
-  $$('.sidebar-foot .nav-item').forEach((a) => a.classList.toggle('active', a.dataset.route === r.name));
+  $$('#sidebar [data-route]').forEach((a) => a.classList.toggle('active', a.dataset.route === r.name));
 
   $('#tabbar').innerHTML = tabConfig().map((k) => {
     const o = TAB_OPTIONS[k];
@@ -2351,6 +2373,7 @@ function bindGlobal() {
       return viewSettings();
     }
     if (el.closest('#search-btn')) return go('#/search');
+    if (el.closest('#refresh-btn')) return manualRefresh();
     if (el.closest('#mode-pill')) return openModeMenu();
     const sp = el.closest('[data-span]');
     if (sp) { store.set('weekSpan', +sp.dataset.span); return go('#/week'); }
