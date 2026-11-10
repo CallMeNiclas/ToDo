@@ -4,10 +4,8 @@ import { listEvents, GoogleNotConnected } from './google.js';
 import { getVapid, pushAll } from './notify.js';
 import { localNow, addDays, zonedToUtc } from './time.js';
 import { b64url } from './push.js';
-import { healthSummary } from './health.js';
 import { computeMode, setMode, setHoliday } from './mode.js';
 import { activeFocus, focusView, startFocus, pauseFocus, stopFocus, extendFocus } from './focus.js';
-import { habits, habitCompletionsStmt } from './habits.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
@@ -31,14 +29,13 @@ export async function handleApi(request, env) {
       const startOfToday = zonedToUtc(today, '00:00', env.TIMEZONE).toISOString();
       // one round trip to D1 for everything the app needs to start
       const db = env.DB;
-      const [rProjects, rTasks, rPlaces, rKv, rDone, rFocus, rHab] = await db.batch([
+      const [rProjects, rTasks, rPlaces, rKv, rDone, rFocus] = await db.batch([
         db.prepare('SELECT * FROM projects WHERE archived = 0 ORDER BY sort, created_at'),
         db.prepare('SELECT * FROM tasks WHERE completed_at IS NULL ORDER BY sort, created_at'),
         db.prepare('SELECT * FROM places ORDER BY name'),
-        db.prepare("SELECT key, value FROM settings WHERE key LIKE 'u.%' OR key LIKE 'logo_v_%' OR key LIKE 'logo_style_%' OR key IN ('google_refresh_token', 'vapid', 'holiday', 'mode_override')"),
+        db.prepare("SELECT key, value FROM settings WHERE key LIKE 'u.%' OR key IN ('google_refresh_token', 'vapid', 'holiday', 'mode_override')"),
         db.prepare('SELECT COUNT(*) AS n FROM completions WHERE completed_at >= ?').bind(startOfToday),
         db.prepare('SELECT * FROM focus_sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1'),
-        habitCompletionsStmt(env),
       ]);
       const projects = rProjects.results;
       const tasks = rTasks.results.map(T.rowToTask);
@@ -47,18 +44,11 @@ export async function handleApi(request, env) {
       const settings = T.userSettingsFrom(rKv.results);
       const doneToday = rDone.results[0]?.n || 0;
       const vapid = sv.vapid ? JSON.parse(sv.vapid) : await getVapid(env);
-      const [mode, focus, hab] = await Promise.all([
-        computeMode(env, new Date(), { settings, holiday: sv.holiday, override: sv.mode_override }),
-        focusView(rFocus.results[0] || null),
-        habits(env, { days: 1, pre: { tasks, completions: rHab.results } }),
-      ]);
-      const modes = ['work', 'private', 'holiday'];
+      const mode = await computeMode(env, new Date(), { settings, holiday: sv.holiday, override: sv.mode_override });
+      const focus = focusView(rFocus.results[0] || null);
       return json({
         today, timezone: env.TIMEZONE, email: env.OWNER_EMAIL, projects, tasks, places, settings,
         doneToday, vapidPublicKey: vapid.publicKey, mode, focus,
-        streaks: Object.fromEntries(hab.habits.map((h) => [h.task_id, h.current])),
-        logos: Object.fromEntries(modes.map((m) => [m, sv['logo_v_' + m] || null])),
-        logoStyles: Object.fromEntries(modes.map((m) => [m, sv['logo_style_' + m] || 'logo'])),
         googleConnected: !!sv.google_refresh_token,
       });
     }
@@ -100,40 +90,9 @@ export async function handleApi(request, env) {
     if (path === '/focus/resume' && method === 'POST') return json({ focus: await pauseFocus(env, false) });
     if (path === '/focus/extend' && method === 'POST') return json({ focus: await extendFocus(env, body.minutes || 5) });
     if (path === '/focus/stop' && method === 'POST') return json({ stopped: await stopFocus(env), focus: null });
-    if (path === '/habits' && method === 'GET') return json(await habits(env, { days: +url.searchParams.get('days') || 84 }));
     if (path === '/mode' && method === 'GET') return json(await computeMode(env));
     if (path === '/mode' && method === 'POST') return json(await setMode(env, body.mode));
     if (path === '/holiday' && method === 'POST') return json(await setHoliday(env, body));
-    if ((r = m(/^\/logo\/(work|private|holiday)$/))) {
-      const key = 'logo_' + r[1];
-      if (method === 'GET') {
-        const v = await T.getSetting(env, key);
-        if (!v) return new Response('not found', { status: 404 });
-        const [, type, b64] = v.match(/^data:([^;]+);base64,(.*)$/) || [];
-        const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-        return new Response(bin, { headers: { 'Content-Type': type, 'Cache-Control': 'private, max-age=31536000, immutable' } });
-      }
-      if (method === 'POST') {
-        const d = String(body.dataUrl || '');
-        if (!/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(d) || d.length > 1500000) throw new T.InputError('Bild als PNG/JPG/WebP, max. ca. 1 MB');
-        await T.setSetting(env, key, d);
-        await T.setSetting(env, 'logo_style_' + r[1], body.style === 'photo' ? 'photo' : 'logo');
-        const v = Date.now().toString(36);
-        await T.setSetting(env, 'logo_v_' + r[1], v);
-        return json({ ok: true, v });
-      }
-      if (method === 'DELETE') {
-        await env.DB.prepare('DELETE FROM settings WHERE key IN (?, ?, ?)').bind(key, 'logo_v_' + r[1], 'logo_style_' + r[1]).run();
-        return json({ ok: true });
-      }
-    }
-    if (path === '/health' && method === 'GET') return json(await healthSummary(env, +url.searchParams.get('days') || 14));
-    if (path === '/health-token' && (method === 'GET' || method === 'POST')) {
-      const token = method === 'POST'
-        ? await (async () => { const t = b64url(crypto.getRandomValues(new Uint8Array(24))); await T.setSetting(env, 'health_token', t); return t; })()
-        : await T.ensureSetting(env, 'health_token', () => b64url(crypto.getRandomValues(new Uint8Array(24))));
-      return json({ token, url: `${url.origin}/hooks/health?token=${token}` });
-    }
     if (path === '/stats/completions' && method === 'GET') {
       // completions per local day for the last N days
       const days = Math.min(90, +url.searchParams.get('days') || 7);

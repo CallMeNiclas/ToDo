@@ -19,13 +19,11 @@ Wenn ein neuer Chat startet: diese Datei lesen, dann `README.md` / `SETUP.md` nu
 |---|---|
 | `src/index.js` | Routing, OAuth-Provider für Claude (`/authorize`, `/oauth/*`), Fehlerseite, Cron |
 | `src/api.js` | REST-API der App (`/api/*`), Bootstrap |
-| `src/mcp.js` | MCP-Tools für Claude (Aufgaben, Projekte, Kalender, Health, Habits, Modus) |
+| `src/mcp.js` | MCP-Tools für Claude (Aufgaben, Projekte, Kalender, Modus) |
 | `src/tasks.js` | Datenlogik, Validierung, Wiederholungen, Erinnerungsplanung, Settings |
 | `src/notify.js` | Cron-Versand (Push/Mail), Standort-Webhook |
 | `src/mode.js` | Fokus-Modus Arbeit/Privat/Alles, Zeitplan, Urlaub, iOS-Fokus-Webhook |
 | `src/focus.js` | Fokus-Timer |
-| `src/habits.js` | Streaks (nur Aufgaben mit `habit=1`) |
-| `src/health.js` | Apple Health via „Health Auto Export“ (`/hooks/health`) |
 | `src/google.js` | Google Token, Kalender, Gmail |
 | `src/push.js` | Web Push (VAPID + aes128gcm) |
 | `public/js/app.js` | gesamte Oberfläche |
@@ -39,8 +37,7 @@ Wenn ein neuer Chat startet: diese Datei lesen, dann `README.md` / `SETUP.md` nu
 Woche (1/3/7 Tage), Demnächst, Projekte mit Hauptprojekt/Unterprojekten (1 Ebene, Haken „Hauptprojekt“),
 Labels, Suche (nur im Menü), Erledigt, Deadline-Feld, Dauer, Wiederholungen, Erinnerungen (Push; Mail nur Prio 1 & nicht wiederkehrend),
 Standort-Erinnerungen (iOS-Kurzbefehl), Offline-Modus mit Sync-Status, Fokus-Modus (Zeitplan Mo–Fr 08:15–18:15, iPhone-Fokus, manuell, Urlaub)
-mit Hintergrundfoto je Modus, Fokus-Timer (+ Kurzbefehl „NTD Fokus“ für Dynamic Island), Streaks (opt-in: WeWard, Inbox Zero),
-Apple Health (Schritte/Ziel, Schlaf, weitere Werte), Spracheingabe, anpassbare Menüleiste unten, optimistische UI (sofortige Reaktion).
+Fokus-Timer (+ Kurzbefehl „NTD Fokus“ für Dynamic Island), Pop-up bei Fälligkeit, Spracheingabe, anpassbare Menüleiste unten, optimistische UI (sofortige Reaktion).
 
 ## Nics Daten
 - Projekte: `🛋️fundus7` (Hauptprojekt, Bereich Arbeit) mit `☑️To-Do‘s` und `🔁 W. To-Do’s`; `🫡Nic` (Privat)
@@ -61,3 +58,6 @@ Apple Health (Schritte/Ziel, Schlaf, weitere Werte), Spracheingabe, anpassbare M
 - Vor dem Push: `npx wrangler deploy --dry-run` (Build-Check), Service-Worker-Version hochzählen
 - Live-Daten über den Connector prüfen (Tools `mcp__Todo__*`)
 - Offene Ideen („maybe“): Planungsansicht „Morgen“ inkl. Tourenplan aus Google Sheets, Todoist-Import
+
+## Entfernt (11/2026, App war überladen)
+Gesundheit/Apple Health, Gewohnheiten/Streaks, Hintergrundbilder/Logos je Modus. DB-Tabellen/Spalten (`health_samples`, `tasks.habit`, `logo_*`-Settings) liegen noch, werden aber nicht mehr genutzt.

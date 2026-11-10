@@ -44,15 +44,10 @@ const P = {
   ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
-  flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
   play: '<polygon points="6 3 20 12 6 21 6 3" fill="currentColor"/>',
   pause: '<rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/>',
   stop: '<rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/>',
   grid: '<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>',
-  heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>',
-  steps: '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0zM20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0z"/>',
-  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
-  bars: '<path d="M3 3v18h18"/><path d="M7 16v-4M12 16V8M17 16v-6"/>',
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>',
 };
@@ -122,8 +117,8 @@ function applyBootstrap(b) {
   Object.assign(S, {
     tasks: b.tasks, projects: b.projects, places: b.places, settings: b.settings, today: b.today,
     doneToday: b.doneToday, google: b.googleConnected, vapid: b.vapidPublicKey, email: b.email,
-    mode: b.mode || S.mode, logos: b.logos || S.logos || {}, logoStyles: b.logoStyles || S.logoStyles || {},
-    focus: b.focus !== undefined ? b.focus : S.focus, focusAt: Date.now(), streaks: b.streaks || S.streaks || {},
+    mode: b.mode || S.mode,
+    focus: b.focus !== undefined ? b.focus : S.focus, focusAt: Date.now(),
   });
   renderMode();
   renderFocusPill();
@@ -295,14 +290,13 @@ async function doRefresh({ force = false } = {}) {
   } catch { return false; /* offline – ignore */ }
 }
 
-/** "Aktualisieren" in the menu: fetch everything fresh (tasks, calendar, health, streaks) */
+/** "Aktualisieren" in the menu: fetch everything fresh (tasks, calendar) */
 async function manualRefresh() {
   const btn = $('#refresh-btn');
   if (btn?.classList.contains('spin')) return;
   btn?.classList.add('spin');
   for (const v of S.cal.values()) v.at = 0;
-  if (healthCache) healthCache._at = 0;
-  habitsCache = null; doneStatsAt = 0;
+  doneStatsAt = 0;
   if (refreshing) await refreshing;
   const ok = await refresh({ force: true });
   btn?.classList.remove('spin');
@@ -446,13 +440,6 @@ function renderMode() {
     pill.innerHTML = `<span class="mode-emoji">${ui.emoji}</span><span class="mode-label">${ui.label}</span>`;
     pill.title = `Modus: ${ui.label}${auto}`;
   }
-  const wm = $('#watermark');
-  if (wm) {
-    const key = S.logos?.[k] ? k : k === 'holiday' && S.logos?.private ? 'private' : null;
-    const v = key && k !== 'all' ? S.logos[key] : null;
-    wm.style.backgroundImage = v ? `url(/api/logo/${key}?v=${v})` : 'none';
-    document.body.dataset.bg = v ? (S.logoStyles?.[key] === 'photo' ? 'photo' : 'logo') : '';
-  }
 }
 function openModeMenu() {
   const m = S.mode || {};
@@ -578,7 +565,7 @@ function parseRoute() {
   const [name, ...rest] = h.split('/');
   const arg = rest.join('/');
   if (name === 'task' && arg) return { name: 'task', id: arg };
-  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings', 'health', 'habits'].includes(name)) return { name, arg };
+  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings'].includes(name)) return { name, arg };
   if (name === 'project' && arg) return { name, arg };
   if (name === 'label' && arg) return { name, arg };
   if (name === 'search') return { name, arg: arg || '' };
@@ -613,7 +600,7 @@ function render() {
   const r = S.route;
   $('#top-actions').innerHTML = '';
   $('#view-sub').textContent = '';
-  const views = { dashboard: viewDashboard, health: viewHealth, habits: viewHabits, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
+  const views = { dashboard: viewDashboard, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
   document.body.dataset.view = r.name;
   $('#mode-pill').hidden = !['dashboard', 'today'].includes(r.name);
   (views[r.name] || viewDashboard)();
@@ -636,9 +623,7 @@ function renderNav() {
     item('#/today', icon('today'), 'Heute', c.today + c.overdue || '', active('today')).replace('class="count"', c.overdue ? 'class="count alert"' : 'class="count"') +
     item('#/week', icon('week'), 'Diese Woche', c.week || '', active('week')) +
     item('#/upcoming', icon('upcoming'), 'Demnächst', '', active('upcoming')) +
-    item('#/inbox', icon('inbox'), 'Eingang', c.inbox || '', active('inbox')) +
-    item('#/health', icon('heart'), 'Gesundheit', '', active('health')) +
-    item('#/habits', icon('flame'), 'Gewohnheiten', '', active('habits'));
+    item('#/inbox', icon('inbox'), 'Eingang', c.inbox || '', active('inbox'));
 
   const perProject = new Map();
   for (const t of open()) if (!t.parent_id) perProject.set(t.project_id, (perProject.get(t.project_id) || 0) + 1);
@@ -673,8 +658,6 @@ const TAB_OPTIONS = {
   week: { label: 'Woche', icon: 'week' },
   upcoming: { label: 'Demnächst', icon: 'upcoming' },
   inbox: { label: 'Eingang', icon: 'inbox' },
-  habits: { label: 'Streaks', icon: 'flame' },
-  health: { label: 'Gesundheit', icon: 'heart' },
   search: { label: 'Suche', icon: 'search' },
   completed: { label: 'Erledigt', icon: 'done' },
 };
@@ -743,7 +726,7 @@ function taskRow(t, { showProject = true, showDate = true, sub = false, showPare
   else if (t.due_time) meta.push(`<span class="${dueClass(t)}">${icon('clock')}${t.due_time}</span>`);
   if (t.deadline) { const di = deadlineInfo(t.deadline); meta.push(`<span class="deadline ${di.cls}" title="Deadline ${esc(t.deadline)}">${icon('target')}${di.text}</span>`); }
   if (t.duration_min) meta.push(`<span>${icon('timer')}${fmtDuration(t.duration_min)}</span>`);
-  if (t.recurrence) meta.push(`<span title="${esc(recurrenceLabel(t.recurrence))}">${icon('repeat')}${S.streaks?.[t.id] >= 2 ? `<b class="streak">🔥${S.streaks[t.id]}</b>` : ''}</span>`);
+  if (t.recurrence) meta.push(`<span title="${esc(recurrenceLabel(t.recurrence))}">${icon('repeat')}</span>`);
   if (S.focus?.task_id === t.id) meta.push(`<span class="focus-on">${icon('timer')}Fokus läuft</span>`);
   const subs = subCount(t.id);
   if (subs) meta.push(`<span>${icon('sub')}${subs}</span>`);
@@ -1108,36 +1091,6 @@ async function viewCompleted() {
     : `<div class="panel">${emptyHtml('🎯', 'Noch nichts erledigt.')}</div>`;
 }
 
-// ---------------------------------------------------------------- health data
-let healthCache = store.get('health', null);
-async function loadHealth(force) {
-  if (!force && healthCache && Date.now() - (healthCache._at || 0) < 2 * 60000) return healthCache;
-  try {
-    const h = await api('/health?days=30');
-    healthCache = { ...h, _at: Date.now() };
-    store.set('health', healthCache);
-  } catch { /* offline: keep cached */ }
-  return healthCache;
-}
-// Health Auto Export only runs when iOS lets it – make a stalled sync visible.
-// Daytime (08–22 Uhr) a sync is expected at least every 3 h, at night (phone locked) 6 h.
-const healthStaleLimitH = (d = new Date()) => (d.getHours() >= 8 && d.getHours() < 22 ? 3 : 6);
-function fmtAgo(ms) {
-  const min = Math.max(0, Math.floor(ms / 60000));
-  if (min < 1) return 'gerade eben';
-  if (min < 60) return `vor ${min} Min.`;
-  const h = Math.floor(min / 60);
-  return h < 48 ? `vor ${h} Std.` : `vor ${Math.floor(h / 24)} Tagen`;
-}
-/** "Aktualisiert: 5.11.26, 15:50 · vor 2 Std." plus a warning when the sync is overdue */
-function healthSyncHtml(h) {
-  if (!h?.lastSync) return '';
-  const at = new Date(h.lastSync);
-  const ms = Date.now() - at.getTime();
-  const stamp = `${at.getDate()}.${at.getMonth() + 1}.${String(at.getFullYear()).slice(2)}, ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-  const stale = ms / 3600000 >= healthStaleLimitH();
-  return `<div class="health-sync${stale ? ' stale' : ''}" role="status">${stale ? '⚠️ ' : ''}Aktualisiert: ${stamp} · ${fmtAgo(ms)}${stale ? '<small>Überfällig – Health Auto Export öffnen oder Export manuell starten</small>' : ''}</div>`;
-}
 let doneStats = store.get('doneStats', null);
 let doneStatsAt = 0;
 async function loadDoneStats() {
@@ -1147,20 +1100,7 @@ async function loadDoneStats() {
   return doneStats;
 }
 const fmtNum = (n) => (n == null ? '–' : Math.round(n).toLocaleString('de-DE'));
-const fmtHours = (h) => { if (h == null) return '–'; const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')} Std.`; };
-const timeOfTs = (x) => (x ? String(x).slice(11, 16) : '');
 
-function ringSvg(value, goal, size = 120, stroke = 12, color = 'var(--ok)') {
-  const r = (size - stroke) / 2, L = 2 * Math.PI * r;
-  const pct = goal ? Math.min(1, (value || 0) / goal) : 0;
-  return `<svg class="ring-big" viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px" role="img" aria-label="${Math.round(pct * 100)} Prozent">
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round"
-      stroke-dasharray="${L}" stroke-dashoffset="${L * (1 - pct)}" transform="rotate(-90 ${size / 2} ${size / 2})"/>
-  </svg>`;
-}
-
-/** simple bar chart: items [{label, value, hit, title}] (HTML, so labels never distort) */
 function barsSvg(items, { goal, height = 110, color = 'var(--accent)', hitColor = 'var(--ok)', fmt = fmtNum } = {}) {
   const max = Math.max(goal || 0, ...items.map((i) => i.value || 0), 1);
   const plot = height - 20;
@@ -1172,21 +1112,13 @@ function barsSvg(items, { goal, height = 110, color = 'var(--accent)', hitColor 
   return `<div class="bchart" style="height:${height}px">${goalY !== null ? `<div class="bgoal" style="top:${goalY}px"></div>` : ''}${cols}</div>`;
 }
 
-function weekStepItems(h, n = 7) {
-  const days = (h?.days || []).slice(-n);
-  return days.map((d) => ({ label: WD_SHORT[isoWeekday(d.date)], value: d.step_count || 0, hit: (d.step_count || 0) >= (h.goal || 10000), title: d.date }));
-}
-
 // ---------------------------------------------------------------- dashboard
 const DASH_CARDS = {
   stats: 'Kennzahlen',
   today: 'Aufgaben heute',
   agenda: 'Termine',
-  steps: 'Schritte',
-  sleep: 'Schlaf',
   deadlines: 'Deadlines',
   done: 'Erledigt (7 Tage)',
-  habits: 'Streaks',
 };
 function dashConfig() {
   const narrow = window.innerWidth <= 860;
@@ -1242,50 +1174,6 @@ function viewDashboard() {
   drawAgenda(cachedEvents(t, addDays(t, 2)));
   events(t, addDays(t, 2)).then((d) => { if (S.route.name === 'dashboard') drawAgenda(d); });
 
-  // health cards
-  const drawHealth = (h) => {
-    if (!h || !h.days?.length || !h.lastSync) {
-      const setup = `<div class="empty">Noch keine Daten aus Apple Health.<br><a href="#/health" style="color:var(--accent)">Einrichten →</a></div>`;
-      fill('steps', `<div class="dcard-head"><h2>${icon('steps')}Schritte</h2></div>${setup}`);
-      fill('sleep', `<div class="dcard-head"><h2>${icon('moon')}Schlaf</h2></div>${setup}`);
-      return;
-    }
-    const d = h.days[h.days.length - 1];
-    const steps = d.step_count || 0;
-    const items = weekStepItems(h, 7);
-    const hits = items.filter((i) => i.hit).length;
-    fill('steps', `<div class="dcard-head"><h2>${icon('steps')}Schritte</h2>${link('#/health', 'Details')}</div>
-      ${healthSyncHtml(h)}
-      <div class="steps-main">${ringSvg(steps, h.goal, 116, 12, steps >= h.goal ? 'var(--ok)' : 'var(--accent)')}
-        <div><div class="big-num">${fmtNum(steps)}</div><div class="muted">von ${fmtNum(h.goal)} · ${Math.round((steps / h.goal) * 100)}%</div>
-        <div class="muted">${steps >= h.goal ? '🎉 Ziel erreicht' : `noch ${fmtNum(h.goal - steps)}`}</div></div></div>
-      ${barsSvg(items, { goal: h.goal, height: 90 })}
-      <div class="muted center">${hits} von 7 Tagen Ziel geschafft</div>`);
-    const nights = h.days.slice(-7).filter((x) => x.sleep?.hours);
-    const last = [...h.days].reverse().find((x) => x.sleep?.hours);
-    const avg = nights.length ? nights.reduce((n, x) => n + x.sleep.hours, 0) / nights.length : null;
-    const ph = last?.sleep || {};
-    const tot = (ph.deep || 0) + (ph.core || 0) + (ph.rem || 0) + (ph.awake || 0);
-    const seg = (v, c, l) => (v ? `<span style="flex:${v};background:${c}" title="${l} ${fmtHours(v)}"></span>` : '');
-    fill('sleep', `<div class="dcard-head"><h2>${icon('moon')}Schlaf</h2>${link('#/health', 'Details')}</div>
-      ${last ? `<div class="big-num">${fmtHours(last.sleep.hours)}</div>
-      <div class="muted">${last.date === t ? 'letzte Nacht' : relDate(last.date, t)}${ph.start ? ` · ${timeOfTs(ph.start)}–${timeOfTs(ph.end)}` : ''}</div>
-      ${tot ? `<div class="phases">${seg(ph.deep, '#4338ca', 'Tief')}${seg(ph.core, '#6366f1', 'Kern')}${seg(ph.rem, '#a5b4fc', 'REM')}${seg(ph.awake, '#f59e0b', 'Wach')}</div>
-      <div class="legend"><span><i style="background:#4338ca"></i>Tief ${fmtHours(ph.deep)}</span><span><i style="background:#6366f1"></i>Kern ${fmtHours(ph.core)}</span><span><i style="background:#a5b4fc"></i>REM ${fmtHours(ph.rem)}</span></div>` : ''}
-      <div class="muted">Ø 7 Nächte: ${fmtHours(avg)}</div>` : '<div class="empty">Keine Schlafdaten.</div>'}`);
-  };
-  drawHealth(healthCache);
-  loadHealth().then((h) => { if (S.route.name === 'dashboard') drawHealth(h); });
-
-  // habits
-  const drawHabits = (h) => {
-    const list = (h?.habits || []).filter(inScope).slice(0, 5);
-    fill('habits', `<div class="dcard-head"><h2>${icon('flame')}Streaks</h2>${link('#/habits', 'Alle')}</div>
-      ${list.length ? list.map((x) => `<a class="habit-row" href="#/habits"><span class="hflame${x.current ? '' : ' cold'}">🔥 ${x.current}</span><span class="htitle">${esc(x.title)}</span><span class="hdots">${last7(x).map((v) => `<i class="d${v}"></i>`).join('')}</span></a>`).join('') : '<div class="empty">Noch keine Gewohnheiten markiert.</div>'}`);
-  };
-  drawHabits(habitsCache);
-  loadHabits().then((h) => { if (S.route.name === 'dashboard') drawHabits(h); });
-
   // completions
   const drawDone = (st) => {
     if (!st) { fill('done', `<div class="dcard-head"><h2>${icon('done')}Erledigt</h2></div><div class="empty">Lädt …</div>`); return; }
@@ -1296,58 +1184,6 @@ function viewDashboard() {
   };
   drawDone(doneStats);
   loadDoneStats().then((st) => { if (S.route.name === 'dashboard') drawDone(st); });
-}
-
-// ---------------------------------------------------------------- habits
-let habitsCache = store.get('habits', null);
-let habitsAt = 0;
-async function loadHabits(force) {
-  if (!force && Date.now() - habitsAt < 60000 && habitsCache) return habitsCache;
-  habitsAt = Date.now();
-  try { habitsCache = await api('/habits?days=84'); store.set('habits', habitsCache); } catch { /* offline */ }
-  return habitsCache;
-}
-/** last 7 days: 1 done, -1 missed, 0 open today, x not scheduled */
-function last7(h) {
-  const out = [];
-  for (let i = 6; i >= 0; i--) { const d = addDays(S.today, -i); out.push(d in h.grid ? h.grid[d] : 'x'); }
-  return out;
-}
-function heatmap(h) {
-  const weeks = 12;
-  const start = addDays(mondayOf(S.today), -7 * (weeks - 1));
-  let cols = '';
-  for (let w = 0; w < weeks; w++) {
-    let cells = '';
-    for (let d = 0; d < 7; d++) {
-      const day = addDays(start, w * 7 + d);
-      const v = day > S.today ? 'f' : day in h.grid ? h.grid[day] : 'x';
-      cells += `<i class="hm d${v}${day === S.today ? ' today' : ''}" title="${day}"></i>`;
-    }
-    cols += `<div class="hm-col">${cells}</div>`;
-  }
-  return `<div class="hm-wrap"><div class="hm-days">${['M', '', 'M', '', 'F', '', 'S'].map((x) => `<span>${x}</span>`).join('')}</div>${cols}</div>`;
-}
-async function viewHabits() {
-  setTitle(window.innerWidth <= 860 ? 'Streaks' : 'Gewohnheiten', 'Deine wiederkehrenden Aufgaben');
-  const draw = (h) => {
-    if (S.route.name !== 'habits') return;
-    if (!h) { $('#content').innerHTML = '<div class="panel"><div class="empty">Lädt …</div></div>'; return; }
-    const list = (h.habits || []).filter(inScope);
-    if (!list.length) { $('#content').innerHTML = `<div class="panel">${emptyHtml('🔥', 'Noch keine Gewohnheiten. Öffne eine wiederkehrende Aufgabe und setze den Haken „Gewohnheit · Streaks tracken“.')}</div>`; return; }
-    $('#content').innerHTML = `<div class="habits">${list.map((x) => {
-      const p = project(x.project_id);
-      return `<section class="dcard habit" data-task="${x.task_id}">
-        <div class="habit-top"><div class="habit-flame${x.current ? '' : ' cold'}"><span>🔥</span><b>${x.current}</b></div>
-          <div class="habit-info"><div class="habit-title">${esc(x.title)}</div><div class="muted small">${esc(recurrenceLabel(x.recurrence))}${p && p.id !== 'inbox' ? ' · ' + esc(projectPath(p.id)) : ''}</div></div></div>
-        <div class="kpis"><div><b>${x.current}</b><span>aktuell</span></div><div><b>${x.best}</b><span>Rekord</span></div><div><b>${x.rate_30 == null ? '–' : x.rate_30 + '%'}</b><span>letzte 30 Tage</span></div></div>
-        ${heatmap(x)}
-      </section>`;
-    }).join('')}</div>
-    <p class="muted small center">Grün = erledigt · Rot = verpasst · Grau = nicht fällig. Nachträglich Abhaken zählt, solange es vor dem nächsten Termin passiert.</p>`;
-  };
-  draw(habitsCache);
-  draw(await loadHabits(true));
 }
 
 // ---------------------------------------------------------------- focus timer
@@ -1431,86 +1267,8 @@ function openFocusPanel() {
   });
 }
 
-// ---------------------------------------------------------------- health view
-async function viewHealth() {
-  setTitle('Gesundheit', 'Daten aus Apple Health');
-  const draw = (h) => {
-    if (S.route.name !== 'health') return;
-    const has = h && h.lastSync;
-    let html = '';
-    if (has) {
-      const days = h.days;
-      const d = days[days.length - 1];
-      const last14 = days.slice(-14);
-      const stepItems = last14.map((x) => ({ label: String(+x.date.slice(8, 10)), value: x.step_count || 0, hit: (x.step_count || 0) >= h.goal, title: x.date }));
-      const hits7 = days.slice(-7).filter((x) => (x.step_count || 0) >= h.goal).length;
-      const hits30 = days.filter((x) => (x.step_count || 0) >= h.goal).length;
-      const avg7 = days.slice(-7).reduce((n, x) => n + (x.step_count || 0), 0) / 7;
-      const sleepItems = last14.map((x) => ({ label: String(+x.date.slice(8, 10)), value: x.sleep?.hours || 0, hit: (x.sleep?.hours || 0) >= 7, title: x.date }));
-      const latest = (m) => { for (let i = days.length - 1; i >= 0; i--) if (days[i][m] != null) return { v: days[i][m], date: days[i].date }; return null; };
-      const extras = [['active_energy', 'Aktive Energie', (v) => fmtNum(v) + ' kcal'], ['apple_exercise_time', 'Trainingsminuten', (v) => fmtNum(v) + ' Min.'], ['walking_running_distance', 'Strecke', (v) => v.toFixed(1).replace('.', ',') + ' km'], ['resting_heart_rate', 'Ruhepuls', (v) => fmtNum(v) + ' bpm'], ['heart_rate_variability', 'HRV', (v) => fmtNum(v) + ' ms'], ['weight_body_mass', 'Gewicht', (v) => v.toFixed(1).replace('.', ',') + ' kg']]
-        .map(([m, l, f]) => { const x = latest(m); return x ? `<div class="metric"><div class="muted">${l}</div><div class="metric-v">${f(x.v)}</div><div class="muted small">${x.date === h.today ? 'heute' : relDate(x.date, h.today)}</div></div>` : ''; }).join('');
-      html += `${healthSyncHtml(h)}<div class="dash">
-        <section class="dcard"><div class="dcard-head"><h2>${icon('steps')}Schritte heute</h2></div>
-          <div class="steps-main">${ringSvg(d.step_count || 0, h.goal, 130, 13, (d.step_count || 0) >= h.goal ? 'var(--ok)' : 'var(--accent)')}<div><div class="big-num">${fmtNum(d.step_count || 0)}</div><div class="muted">Ziel ${fmtNum(h.goal)}</div></div></div>
-          <div class="row-goal"><label>Tagesziel</label><input type="number" min="1000" step="500" value="${h.goal}" data-setting="step_goal" inputmode="numeric"></div></section>
-        <section class="dcard"><div class="dcard-head"><h2>${icon('bars')}Schritte · 14 Tage</h2></div>${barsSvg(stepItems, { goal: h.goal, height: 140 })}
-          <div class="kpis"><div><b>${hits7}/7</b><span>Tage Ziel (Woche)</span></div><div><b>${hits30}/30</b><span>Tage Ziel (Monat)</span></div><div><b>${fmtNum(avg7)}</b><span>Ø pro Tag (7)</span></div></div></section>
-        <section class="dcard"><div class="dcard-head"><h2>${icon('moon')}Schlaf · 14 Nächte</h2></div>${barsSvg(sleepItems, { height: 140, color: '#6366f1', hitColor: '#4338ca', fmt: fmtHours })}
-          <div class="muted center">dunkel = mind. 7 Std.</div></section>
-        ${extras ? `<section class="dcard"><div class="dcard-head"><h2>${icon('heart')}Weitere Werte</h2></div><div class="metrics">${extras}</div></section>` : ''}
-      </div>`;
-    } else {
-      html += `<div class="panel" style="padding:18px 20px"><h2 style="margin:0 0 6px;font-size:17px">Noch keine Daten</h2><p class="muted">Richte „Health Auto Export“ auf dem iPhone ein (Anleitung unten). Danach erscheinen hier Schritte, Schlaf und mehr.</p></div>`;
-    }
-    html += `<details class="panel setup" ${has ? '' : 'open'}><summary>Einrichtung: Health Auto Export</summary>
-      <ol>
-        <li>App <b>„Health Auto Export – JSON+CSV“</b> aus dem App Store laden, öffnen und Zugriff auf Apple Health erlauben (alles erlauben).</li>
-        <li>Premium aktivieren (7 Tage gratis testen, danach z. B. Jahresabo).</li>
-        <li>Unten im Menü <b>Automations</b> → <b>+</b> (neue Automation) → Typ <b>REST API</b>.</li>
-        <li><b>URL:</b> die Adresse unten einfügen (enthält deinen geheimen Schlüssel).</li>
-        <li><b>Data Type:</b> Health Metrics · <b>Format:</b> JSON · <b>Version:</b> v2.</li>
-        <li><b>Metriken auswählen:</b> Step Count, Sleep Analysis, Active Energy, Apple Exercise Time, Walking + Running Distance, Resting Heart Rate, Heart Rate Variability, Weight.</li>
-        <li><b>Date Range:</b> „Since last sync“ bzw. „Today“ · <b>Aggregation / Time Grouping:</b> <b>Days</b> (wichtig!) · Sleep: „Aggregate Sleep“ an.</li>
-        <li><b>Sync Cadence:</b> so oft wie möglich (z. B. alle 15–30 Min.). Automation aktivieren und einmal <b>„Manual Export“</b> antippen.</li>
-      </ol>
-      <div class="row"><span class="code" id="health-url">…</span><button class="btn sm" data-act="copy-health">${icon('copy')}Kopieren</button><button class="btn sm ghost" data-act="new-health-token">Neu erzeugen</button></div>
-      <p class="muted small">iOS lässt Apps im Hintergrund nur begrenzt laufen. Die Daten kommen daher etwa alle 15–60 Min. und spätestens, wenn du Health Auto Export kurz öffnest. Fehlende Werte werden beim nächsten Mal nachgeholt.</p>
-    </details>`;
-    $('#content').innerHTML = html;
-    api('/health-token').then((x) => { if ($('#health-url')) $('#health-url').textContent = x.url; }).catch(() => {});
-  };
-  draw(healthCache);
-  draw(await loadHealth(true));
-}
-
 // ---------------------------------------------------------------- settings
 const GCOLORS = [['#7986cb','Lavendel'],['#33b679','Salbei'],['#8e24aa','Weintraube'],['#e67c73','Flamingo'],['#f6bf26','Banane'],['#f4511e','Mandarine'],['#039be5','Pfau'],['#616161','Graphit'],['#3f51b5','Blaubeere'],['#0b8043','Basilikum'],['#d50000','Tomate']];
-
-async function uploadLogo(mode, file) {
-  const img = await createImageBitmap(file);
-  // photo or logo? logos usually have transparent pixels
-  const probe = document.createElement('canvas');
-  probe.width = 64; probe.height = 64;
-  const pc = probe.getContext('2d');
-  pc.drawImage(img, 0, 0, 64, 64);
-  const px = pc.getImageData(0, 0, 64, 64).data;
-  let transparent = 0;
-  for (let i = 3; i < px.length; i += 4) if (px[i] < 250) transparent++;
-  const style = transparent > 40 ? 'logo' : 'photo';
-  const max = style === 'photo' ? 1600 : 640, scale = Math.min(1, max / Math.max(img.width, img.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  let dataUrl = style === 'photo' ? c.toDataURL('image/webp', 0.78) : c.toDataURL('image/webp', 0.85);
-  if (!dataUrl.startsWith('data:image/webp')) dataUrl = style === 'photo' ? c.toDataURL('image/jpeg', 0.8) : c.toDataURL('image/png');
-  const r = await api('/logo/' + mode, { method: 'POST', body: { dataUrl, style } });
-  S.logos = { ...S.logos, [mode]: r.v };
-  S.logoStyles = { ...S.logoStyles, [mode]: style };
-  renderMode();
-  viewSettings();
-  toast('Logo gespeichert');
-}
 
 function renderDashSettings() {
   const box = $('#dash-settings');
@@ -1589,9 +1347,6 @@ async function viewSettings() {
       <div class="row"><label>Arbeitszeit</label><input type="time" data-setting="work_start" value="${esc(s.work_start)}"> bis <input type="time" data-setting="work_end" value="${esc(s.work_end)}"></div>
       <div class="row"><label>Termine = Arbeit, wenn Farbe</label><div class="color-pick">${GCOLORS.map(([c, n]) => `<button type="button" class="${String(s.work_colors).toLowerCase().split(',').includes(c) ? 'on' : ''}" data-workcolor="${c}" title="${n}" style="--c:${c}"><span></span>${n}</button>`).join('')}</div></div>
       <div class="row"><label>… oder Stichwort in Titel/Ort</label><input data-setting="work_keywords" value="${esc(s.work_keywords)}" placeholder="z. B. Trippelsberg, Fundus, Messe" style="flex:1;min-width:200px"></div>
-      <h3 class="sub-h">Hintergrundbild (Übersicht &amp; Heute)</h3>
-      <p class="muted small">Fotos füllen den Hintergrund dezent aus, Logos mit transparentem Hintergrund erscheinen als Wasserzeichen. Ohne eigenes Urlaubsbild wird das Privat-Bild genutzt.</p>
-      <div class="logo-row">${['work', 'private', 'holiday'].map((m) => `<div class="logo-slot"><div class="logo-prev" style="${S.logos?.[m] ? `background-image:url(/api/logo/${m}?v=${S.logos[m]})` : ''}">${S.logos?.[m] ? '' : MODE_UI[m].emoji}</div><div><b>${MODE_UI[m].label}</b></div><label class="btn sm">Bild wählen<input type="file" accept="image/*" data-logo="${m}" hidden></label>${S.logos?.[m] ? `<button class="btn sm ghost" data-del-logo="${m}">Entfernen</button>` : ''}</div>`).join('')}</div>
       <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:14px">iPhone-Fokus koppeln (Kurzbefehle)</summary>
         <ol>
           <li>App <b>Kurzbefehle</b> → <b>Automation</b> → <b>+</b> → <b>Fokus</b> → <b>Arbeit</b> → „Wenn aktiviert“ → <b>Sofort ausführen</b>.</li>
@@ -1689,12 +1444,6 @@ async function settingsAction(act, el) {
     if (!S.places.find((x) => x.id === p.id)) S.places.push(p);
     S.places.sort((a, b) => a.name.localeCompare(b.name, 'de'));
     viewSettings();
-  } else if (act === 'copy-health') {
-    copy($('#health-url').textContent);
-  } else if (act === 'new-health-token') {
-    if (!confirm('Neuen Schlüssel erzeugen? Die URL in Health Auto Export muss dann angepasst werden.')) return;
-    const d = await api('/health-token', { method: 'POST' });
-    $('#health-url').textContent = d.url;
   } else if (act === 'tab-toggle' || act === 'tab-up' || act === 'tab-down') {
     let sel = tabConfig();
     const k = el.dataset.tab;
@@ -1751,7 +1500,7 @@ async function saveTask(id, patch, { silent = false } = {}) {
   // optimistic: show simple changes immediately
   const cur = byId(id);
   const prev = cur ? { ...cur } : null;
-  const simple = ['title', 'notes', 'priority', 'due_date', 'due_time', 'duration_min', 'deadline', 'labels', 'project_id', 'habit', 'recurrence'];
+  const simple = ['title', 'notes', 'priority', 'due_date', 'due_time', 'duration_min', 'deadline', 'labels', 'project_id', 'recurrence'];
   if (cur && Object.keys(patch).every((k) => simple.includes(k))) {
     Object.assign(cur, patch);
     if (patch.due_date === null) { cur.due_time = null; cur.recurrence = null; }
@@ -1861,7 +1610,6 @@ async function complete(id) {
   if (recurring) {
     const t = byId(id);
     t.due_date = nextOccurrenceLocal(before.recurrence, before.due_date, S.today);
-    if (S.streaks && t.habit) S.streaks[id] = (S.streaks[id] || 0) + 1;
   } else {
     S.tasks = S.tasks.filter((t) => t.id !== id && t.parent_id !== id);
     if (S.openId === id) closeDrawer();
@@ -1995,8 +1743,6 @@ function renderDrawerNow() {
     <div class="row"><select data-f="recurrence" ${t.due_date ? '' : 'disabled title="Erst ein Datum setzen"'}>${REC_PRESETS.map(([v, l]) => `<option value="${v}" ${rp === v ? 'selected' : ''}>${l}</option>`).join('')}</select>${t.recurrence ? `<span style="font-size:12.5px;color:var(--muted)">${esc(recurrenceLabel(t.recurrence))}</span>` : ''}</div>
     ${rp === 'custom' ? `<span></span><div class="row">alle <input type="number" min="1" max="99" value="${t.recurrence.interval || 1}" data-rec="interval" style="width:62px"><select data-rec="freq">${[['day', 'Tage'], ['week', 'Wochen'], ['month', 'Monate'], ['year', 'Jahre']].map(([v, l]) => `<option value="${v}" ${t.recurrence.freq === v ? 'selected' : ''}>${l}</option>`).join('')}</select>${t.recurrence.freq === 'week' ? `<div class="days-pick">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<button class="${(t.recurrence.days || []).includes(d) ? 'on' : ''}" data-rec-day="${d}">${WD_SHORT[d]}</button>`).join('')}</div>` : ''}</div>` : ''}
 
-    ${t.recurrence ? `<label>${icon('flame')}Gewohnheit</label>
-    <div class="row"><label class="dlg-check" style="padding:0"><input type="checkbox" data-habit ${t.habit ? 'checked' : ''}><span>Streaks tracken${t.habit && S.streaks?.[t.id] ? ` · 🔥 ${S.streaks[t.id]}` : ''}</span></label></div>` : ''}
 
     <label>${icon('tag')}Labels</label>
     <div class="row">${t.labels.map((l) => `<span class="pill">@${esc(l)}<button data-del-label="${esc(l)}" aria-label="Label entfernen">${icon('x')}</button></span>`).join('')}<input class="tag-input" id="label-input" placeholder="+ Label" list="label-list"><datalist id="label-list">${labelsAll.map((l) => `<option value="${esc(l)}">`).join('')}</datalist></div>
@@ -2085,7 +1831,6 @@ function bindDrawer() {
     if (!t) return;
     const f = e.target.dataset.f;
     if (e.target.id === 'label-input') return addLabel(e.target.value);
-    if (e.target.matches('[data-habit]')) { await saveTask(t.id, { habit: e.target.checked }); habitsCache = null; loadHabits().then(() => refresh()); return; }
     if (e.target.id === 'add-reminder') {
       const v = e.target.value;
       if (v === '') return;
@@ -2582,12 +2327,6 @@ function bindGlobal() {
     }
     const ce = el.closest('[data-copy-el]');
     if (ce) return copy($('#' + ce.dataset.copyEl).textContent);
-    const dlo = el.closest('[data-del-logo]');
-    if (dlo) {
-      await api('/logo/' + dlo.dataset.delLogo, { method: 'DELETE' });
-      S.logos = { ...S.logos, [dlo.dataset.delLogo]: null };
-      renderMode(); return viewSettings();
-    }
     const cp = el.closest('[data-copy]');
     if (cp) return copy(cp.dataset.copy);
     if (el.closest('[data-reschedule-overdue]')) {
@@ -2603,16 +2342,11 @@ function bindGlobal() {
   });
 
   document.addEventListener('change', async (e) => {
-    if (e.target.dataset?.logo && e.target.files?.[0]) {
-      try { await uploadLogo(e.target.dataset.logo, e.target.files[0]); } catch (err) { toast(err.message); }
-      return;
-    }
     const k = e.target.dataset?.setting;
     if (!k) return;
     try {
       S.settings = await api('/settings', { method: 'PATCH', body: { [k]: e.target.value } });
       if (k.startsWith('work_')) { S.mode = await api('/mode'); renderMode(); }
-      if (k === 'step_goal' && healthCache) { healthCache.goal = +S.settings.step_goal; store.set('health', healthCache); if (S.route.name === 'health') viewHealth(); }
       toast('Gespeichert');
     } catch (err) { toast(err.message); }
   });
