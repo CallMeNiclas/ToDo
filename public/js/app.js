@@ -19,6 +19,7 @@ const P = {
   week: '<rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>',
   upcoming: '<path d="M8 2v4M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M10 16h6M13 13l3 3-3 3"/>',
   inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/>',
   cal: '<rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   timer: '<path d="M10 2h4M12 14l3-3"/><circle cx="12" cy="14" r="8"/>',
@@ -54,7 +55,7 @@ const P = {
 // ---------------------------------------------------------------- view symbols (filled, colored)
 const VI = {
   dashboard: ['#5B7FD6', '<rect x="3" y="3" width="8" height="8" rx="2.2"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2.2"/>'],
-  today: ['#F5C33B', '<path d="M12 2.6l2.75 5.75 6.3.8-4.62 4.37 1.17 6.24L12 16.7l-5.6 3.06 1.17-6.24L2.95 9.15l6.3-.8z" stroke-linejoin="round" stroke-width="1.6" stroke="currentColor"/>'],
+  today: ['#F7A928', '<circle cx="12" cy="12" r="5"/><g stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4M4.8 4.8l1.7 1.7M17.5 17.5l1.7 1.7M4.8 19.2l1.7-1.7M17.5 6.5l1.7-1.7"/></g>'],
   week: ['#E5484D', '<rect x="3" y="4.5" width="18" height="16.5" rx="3.5"/><rect x="3" y="4.5" width="18" height="5" rx="2" fill="#fff" opacity=".28"/><g fill="#fff"><circle cx="8" cy="13.5" r="1.2"/><circle cx="12" cy="13.5" r="1.2"/><circle cx="16" cy="13.5" r="1.2"/><circle cx="8" cy="17.3" r="1.2"/><circle cx="12" cy="17.3" r="1.2"/></g><rect x="7" y="2.5" width="2" height="4" rx="1"/><rect x="15" y="2.5" width="2" height="4" rx="1"/>'],
   upcoming: ['#2FA39A', '<path d="M12 3 2.8 7.7 12 12.4l9.2-4.7z"/><path d="M4.6 11.2 2.8 12.1 12 16.8l9.2-4.7-1.8-.9L12 15z" opacity=".75"/><path d="M4.6 15.6 2.8 16.5 12 21.2l9.2-4.7-1.8-.9L12 19.4z" opacity=".5"/>'],
   inbox: ['#3D8BF2', '<rect x="3" y="3.5" width="18" height="17" rx="4"/><path d="M3 13.5h5.2l1.3 2.3h5l1.3-2.3H21V17a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 17z" fill="#fff" opacity=".9"/>'],
@@ -675,7 +676,7 @@ function renderNav() {
 
 const TAB_OPTIONS = {
   dashboard: { label: 'Übersicht', icon: 'grid' },
-  today: { label: 'Heute', icon: 'today' },
+  today: { label: 'Heute', icon: 'sun' },
   week: { label: 'Woche', icon: 'week' },
   upcoming: { label: 'Demnächst', icon: 'upcoming' },
   inbox: { label: 'Eingang', icon: 'inbox' },
@@ -714,7 +715,7 @@ function statsHtml() {
   const pct = totalToday ? Math.round((S.doneToday / totalToday) * 100) : 0;
   const R = 17, L = 2 * Math.PI * R;
   return `<div class="stats">
-    <a class="stat c1" href="#/today"><div class="ico">${icon('today')}</div><div style="min-width:0"><div class="num">${c.today + c.overdue}</div><div class="lbl">Heute offen</div>${c.overdue ? `<div class="lbl alert">${c.overdue} überfällig</div>` : ''}</div></a>
+    <a class="stat c1" href="#/today"><div class="ico">${icon('sun')}</div><div style="min-width:0"><div class="num">${c.today + c.overdue}</div><div class="lbl">Heute offen</div>${c.overdue ? `<div class="lbl alert">${c.overdue} überfällig</div>` : ''}</div></a>
     <a class="stat c2" href="#/week"><div class="ico">${icon('week')}</div><div style="min-width:0"><div class="num">${c.week}</div><div class="lbl">Diese Woche</div></div></a>
     <a class="stat c3" href="#/upcoming"><div class="ico">${icon('layers')}</div><div style="min-width:0"><div class="num">${c.total}</div><div class="lbl">Insgesamt offen</div></div></a>
     <div class="stat"><svg class="ring" viewBox="0 0 42 42"><circle class="bg" cx="21" cy="21" r="${R}"/><circle class="fg" cx="21" cy="21" r="${R}" stroke-dasharray="${L}" stroke-dashoffset="${L * (1 - pct / 100)}"/></svg><div style="min-width:0"><div class="num">${S.doneToday}</div><div class="lbl">Heute erledigt</div>${totalToday ? `<div class="lbl">${pct}% geschafft</div>` : ''}</div></div>
@@ -1174,7 +1175,7 @@ function viewDashboard() {
   const overdue = sortTasks(scoped().filter((x) => x.due_date && x.due_date < t));
   const today = sortTasks(scoped().filter((x) => x.due_date === t));
   const list = [...overdue, ...today];
-  fill('today', `<div class="dcard-head"><h2>${icon('today')}Aufgaben heute</h2>${link('#/today', `Alle ${list.length}`)}</div>
+  fill('today', `<div class="dcard-head"><h2>${icon('sun')}Aufgaben heute</h2>${link('#/today', `Alle ${list.length}`)}</div>
     ${list.length ? `<div class="dcard-list">${list.slice(0, 6).map((x) => taskRow(x, { showDate: x.due_date !== t })).join('')}</div>${list.length > 6 ? `<a class="dcard-more" href="#/today">+ ${list.length - 6} weitere</a>` : ''}` : emptyHtml('🌤️', 'Nichts mehr für heute.')}`);
 
   // deadlines
