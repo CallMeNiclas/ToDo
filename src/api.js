@@ -5,7 +5,7 @@ import { getVapid, pushAll } from './notify.js';
 import { localNow, addDays, zonedToUtc } from './time.js';
 import { b64url } from './push.js';
 import { computeMode, setMode, setHoliday } from './mode.js';
-import { activeFocus, focusView, startFocus, pauseFocus, stopFocus, extendFocus } from './focus.js';
+import { activeFocus, focusView, startFocus, pauseFocus, stopFocus, extendFocus, setFocusNote, focusHistory } from './focus.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
@@ -89,7 +89,9 @@ export async function handleApi(request, env) {
     if (path === '/focus/pause' && method === 'POST') return json({ focus: await pauseFocus(env, true) });
     if (path === '/focus/resume' && method === 'POST') return json({ focus: await pauseFocus(env, false) });
     if (path === '/focus/extend' && method === 'POST') return json({ focus: await extendFocus(env, body.minutes || 5) });
-    if (path === '/focus/stop' && method === 'POST') return json({ stopped: await stopFocus(env), focus: null });
+    if (path === '/focus/stop' && method === 'POST') return json({ stopped: await stopFocus(env, { note: body.note }), focus: null });
+    if (path === '/focus/note' && method === 'POST') return json({ focus: await setFocusNote(env, body.note) });
+    if (path === '/focus/history' && method === 'GET') return json({ sessions: await focusHistory(env, +url.searchParams.get('limit') || 100) });
     if (path === '/mode' && method === 'GET') return json(await computeMode(env));
     if (path === '/mode' && method === 'POST') return json(await setMode(env, body.mode));
     if (path === '/holiday' && method === 'POST') return json(await setHoliday(env, body));

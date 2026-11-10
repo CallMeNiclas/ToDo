@@ -23,7 +23,7 @@ Wenn ein neuer Chat startet: diese Datei lesen, dann `README.md` / `SETUP.md` nu
 | `src/tasks.js` | Datenlogik, Validierung, Wiederholungen, Erinnerungsplanung, Settings |
 | `src/notify.js` | Cron-Versand (Push/Mail), Standort-Webhook |
 | `src/mode.js` | Fokus-Modus Arbeit/Privat/Alles, Zeitplan, Urlaub, iOS-Fokus-Webhook |
-| `src/focus.js` | Fokus-Timer |
+| `src/focus.js` | Fokus-Timer, Notizen (Spalte `note` wird zur Laufzeit angelegt), Verlauf |
 | `src/google.js` | Google Token, Kalender, Gmail |
 | `src/push.js` | Web Push (VAPID + aes128gcm) |
 | `public/js/app.js` | gesamte Oberfläche |
@@ -37,7 +37,7 @@ Wenn ein neuer Chat startet: diese Datei lesen, dann `README.md` / `SETUP.md` nu
 Woche (1/3/7 Tage), Demnächst, Projekte mit Hauptprojekt/Unterprojekten (1 Ebene, Haken „Hauptprojekt“),
 Labels, Suche (nur im Menü), Erledigt, Deadline-Feld, Dauer, Wiederholungen, Erinnerungen (Push; Mail nur Prio 1 & nicht wiederkehrend),
 Standort-Erinnerungen (iOS-Kurzbefehl), Offline-Modus mit Sync-Status, Fokus-Modus (Zeitplan Mo–Fr 08:15–18:15, iPhone-Fokus, manuell, Urlaub)
-Fokus-Timer (+ Kurzbefehl „NTD Fokus“ für Dynamic Island), Pop-up bei Fälligkeit, Spracheingabe, anpassbare Menüleiste unten, optimistische UI (sofortige Reaktion).
+Fokus-Timer mit Presenter (+5/+10/+15 Min., Notiz) und Fokus-Tab (Verlauf mit Notizen), Pop-up bei Fälligkeit, Spracheingabe, anpassbare Menüleiste unten, optimistische UI (sofortige Reaktion).
 
 ## Nics Daten
 - Projekte: `🛋️fundus7` (Hauptprojekt, Bereich Arbeit) mit `☑️To-Do‘s` und `🔁 W. To-Do’s`; `🫡Nic` (Privat)

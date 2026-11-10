@@ -60,6 +60,7 @@ const VI = {
   upcoming: ['#2FA39A', '<path d="M12 3 2.8 7.7 12 12.4l9.2-4.7z"/><path d="M4.6 11.2 2.8 12.1 12 16.8l9.2-4.7-1.8-.9L12 15z" opacity=".75"/><path d="M4.6 15.6 2.8 16.5 12 21.2l9.2-4.7-1.8-.9L12 19.4z" opacity=".5"/>'],
   inbox: ['#3D8BF2', '<rect x="3" y="3.5" width="18" height="17" rx="4"/><path d="M3 13.5h5.2l1.3 2.3h5l1.3-2.3H21V17a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 17z" fill="#fff" opacity=".9"/>'],
   completed: ['#45B26B', '<rect x="4" y="2.5" width="15" height="19" rx="3"/><rect x="4" y="2.5" width="3.2" height="19" rx="1.5" fill="#000" opacity=".12"/><path d="M8.8 12.3l2.4 2.4 4.6-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+  focus: ['#8B5CF6', '<circle cx="12" cy="13.2" r="8.6"/><rect x="9.5" y="1.6" width="5" height="2.6" rx="1.3"/><path d="M12 8.6v4.8l3 1.8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
   search: ['#8E8E93', '<circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>'],
   settings: ['#8E8E93', '<path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="15" cy="7" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="17" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/>'],
   label: ['#8E8E93', '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1.6" fill="#fff"/>'],
@@ -212,6 +213,9 @@ function start() {
   // due pop-ups: check every 15 s, only while the app is in front
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') activeSince = Date.now(); });
   setInterval(checkDue, 15000);
+  const showRunningFocus = () => { if (S.focus && !document.querySelector('.modal.open')) openFocusPanel(); };
+  setTimeout(showRunningFocus, 600);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(showRunningFocus, 600); });
   setTimeout(checkDue, 3000);
   window.addEventListener('online', () => refresh());
   window.addEventListener('offline', () => setOnline(false));
@@ -587,7 +591,7 @@ function parseRoute() {
   const [name, ...rest] = h.split('/');
   const arg = rest.join('/');
   if (name === 'task' && arg) return { name: 'task', id: arg };
-  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings'].includes(name)) return { name, arg };
+  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings', 'focus'].includes(name)) return { name, arg };
   if (name === 'project' && arg) return { name, arg };
   if (name === 'label' && arg) return { name, arg };
   if (name === 'search') return { name, arg: arg || '' };
@@ -622,7 +626,7 @@ function render() {
   const r = S.route;
   $('#top-actions').innerHTML = '';
   $('#view-sub').textContent = '';
-  const views = { dashboard: viewDashboard, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings };
+  const views = { dashboard: viewDashboard, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings, focus: viewFocus };
   document.body.dataset.view = r.name;
   $('#mode-pill').hidden = !['dashboard', 'today'].includes(r.name);
   (views[r.name] || viewDashboard)();
@@ -646,7 +650,8 @@ function renderNav() {
     item('#/dashboard', viewIcon('dashboard'), 'Übersicht', '', active('dashboard')) +
     item('#/today', viewIcon('today'), 'Heute', c.today + c.overdue || '', active('today')).replace('class="count"', c.overdue ? 'class="count alert"' : 'class="count"') +
     item('#/week', viewIcon('week'), 'Diese Woche', c.week || '', active('week')) +
-    item('#/upcoming', viewIcon('upcoming'), 'Demnächst', '', active('upcoming'));
+    item('#/upcoming', viewIcon('upcoming'), 'Demnächst', '', active('upcoming')) +
+    item('#/focus', viewIcon('focus'), 'Fokus', '', active('focus'));
 
   const perProject = new Map();
   for (const t of open()) if (!t.parent_id) perProject.set(t.project_id, (perProject.get(t.project_id) || 0) + 1);
@@ -683,6 +688,7 @@ const TAB_OPTIONS = {
   inbox: { label: 'Eingang', icon: 'inbox' },
   search: { label: 'Suche', icon: 'search' },
   completed: { label: 'Erledigt', icon: 'done' },
+  focus: { label: 'Fokus', icon: 'timer' },
 };
 const TAB_DEFAULT = ['dashboard', 'today', 'week', 'upcoming'];
 function tabConfig() {
@@ -1224,7 +1230,7 @@ function renderFocusPill() {
   const pill = $('#focus-pill');
   if (!pill) return;
   clearInterval(focusTick);
-  if (!S.focus) { pill.hidden = true; return; }
+  if (!S.focus) { pill.hidden = true; document.querySelector('.focus-modal')?.remove(); return; }
   pill.hidden = false;
   const draw = () => {
     if (!S.focus) return;
@@ -1232,8 +1238,9 @@ function renderFocusPill() {
     pill.classList.toggle('over', r < 0);
     pill.classList.toggle('paused', !!S.focus.paused);
     pill.innerHTML = `${icon(S.focus.paused ? 'pause' : 'timer')}<span>${fmtClock(r)}</span>`;
-    const big = $('#focus-big');
-    if (big) big.textContent = fmtClock(r);
+    drawFocusPanel();
+    const live = $('.fh-live-time');
+    if (live) live.textContent = fmtClock(r);
   };
   draw();
   focusTick = setInterval(draw, 1000);
@@ -1259,37 +1266,123 @@ async function startFocusFor(t) {
   });
   if (!r) return;
   await focusAction('start', { task_id: t?.id, minutes: +r.min });
-  toast(`Fokus gestartet · ${r.min} Min.`);
-  if (store.get('focusShortcut', false)) {
-    location.href = `shortcuts://run-shortcut?name=${encodeURIComponent('NTD Fokus')}&input=text&text=${r.min}`;
-  }
+  openFocusPanel();
+}
+// Focus presenter: big centered card while a focus runs. Not blocking – "Ausblenden"
+// (or a tap next to it) shrinks it to the pill at the top, a tap on the pill brings it back.
+let focusNoteTimer = null;
+let focusNoteDirty = false;
+function focusNoteValue() { return $('#focus-note')?.value ?? S.focus?.note ?? ''; }
+function saveFocusNote(now = false) {
+  clearTimeout(focusNoteTimer);
+  if (!focusNoteDirty || !S.focus) return Promise.resolve();
+  const send = () => {
+    focusNoteDirty = false;
+    const note = focusNoteValue();
+    if (S.focus) S.focus.note = note;
+    return api('/focus/note', { method: 'POST', body: { note } }).catch(() => { focusNoteDirty = true; });
+  };
+  if (now) return send();
+  focusNoteTimer = setTimeout(send, 800);
+  return Promise.resolve();
+}
+function closeFocusPanel() {
+  saveFocusNote(true);
+  document.querySelector('.focus-modal')?.remove();
+}
+function drawFocusPanel() {
+  const card = document.querySelector('.focus-modal .fp-card');
+  const f = S.focus;
+  if (!card || !f) return;
+  const r = focusRemaining();
+  const total = Math.max(60, f.planned_min * 60);
+  card.classList.toggle('over', r < 0);
+  card.classList.toggle('paused', !!f.paused);
+  $('#focus-big').textContent = fmtClock(r);
+  $('#fp-bar').style.width = Math.min(100, Math.max(0, ((total - r) / total) * 100)) + '%';
+  $('#fp-state').textContent = r < 0 ? 'Zeit ist um' : f.paused ? 'Pausiert' : `von ${fmtDuration(f.planned_min)}`;
 }
 function openFocusPanel() {
   const f = S.focus;
   if (!f) return;
+  document.querySelector('.focus-modal')?.remove();
+  const t = f.task_id ? byId(f.task_id) : null;
   const wrap = document.createElement('div');
-  wrap.className = 'modal open';
-  wrap.innerHTML = `<div class="qa-card mode-card focus-card"><div class="muted">Fokus</div><div class="focus-title">${esc(f.title)}</div>
-    <div id="focus-big" class="focus-big">${fmtClock(focusRemaining())}</div><div class="muted center">geplant ${fmtDuration(f.planned_min)}${f.paused ? ' · pausiert' : ''}</div>
-    <div class="focus-btns"><button class="btn" data-f="${f.paused ? 'resume' : 'pause'}">${icon(f.paused ? 'play' : 'pause')}${f.paused ? 'Weiter' : 'Pause'}</button><button class="btn" data-f="extend">+5 Min.</button><button class="btn primary" data-f="stop">${icon('stop')}Beenden</button></div>
-    ${f.task_id ? `<button class="btn ghost sm" data-f="open" style="width:100%;margin-top:8px">Aufgabe öffnen</button>` : ''}</div>`;
+  wrap.className = 'modal open focus-modal';
+  wrap.innerHTML = `<div class="fp-card" role="dialog" aria-label="Fokus">
+    <div class="fp-top"><span class="fp-kicker">${viewIcon('focus', 'vi fp-vi')}Fokus</span><button class="fp-hide" data-f="hide">Ausblenden</button></div>
+    <h2 class="fp-title">${esc(f.title)}</h2>
+    <div class="fp-time"><div id="focus-big" class="focus-big">${fmtClock(focusRemaining())}</div><div id="fp-state" class="fp-state"></div></div>
+    <div class="fp-track"><div id="fp-bar" class="fp-bar"></div></div>
+    <div class="fp-add"><button class="btn" data-f="add" data-min="5">+5 Min.</button><button class="btn" data-f="add" data-min="10">+10 Min.</button><button class="btn" data-f="add" data-min="15">+15 Min.</button></div>
+    <textarea id="focus-note" class="fp-note" rows="3" placeholder="Notiz zu diesem Fokus … (wird im Fokus-Tab gespeichert)">${esc(f.note || '')}</textarea>
+    <div class="fp-main">
+      <button class="btn" data-f="${f.paused ? 'resume' : 'pause'}">${icon(f.paused ? 'play' : 'pause')}${f.paused ? 'Weiter' : 'Pause'}</button>
+      <button class="btn" data-f="stop">${icon('stop')}Beenden</button>
+      ${t ? `<button class="btn primary" data-f="done">${icon('check')}Erledigt</button>` : ''}
+    </div>
+    ${t ? '<button class="due-open" data-f="open">Aufgabe öffnen</button>' : ''}
+  </div>`;
   document.body.appendChild(wrap);
+  drawFocusPanel();
+  const note = $('#focus-note');
+  note.addEventListener('input', () => { focusNoteDirty = true; saveFocusNote(); });
+  note.addEventListener('blur', () => saveFocusNote(true));
   wrap.addEventListener('click', async (e) => {
-    if (e.target === wrap) return wrap.remove();
+    if (e.target === wrap) return closeFocusPanel();
     const b = e.target.closest('[data-f]');
     if (!b) return;
     const a = b.dataset.f;
-    wrap.remove();
-    if (a === 'open') return openTask(f.task_id);
-    if (a === 'stop') {
-      const r = await focusAction('stop');
-      const sec = r.stopped?.elapsed_sec || 0;
-      toast(`Fokus beendet · ${fmtDuration(Math.max(1, Math.round(sec / 60)))}`);
+    if (a === 'hide') return closeFocusPanel();
+    if (a === 'open') { closeFocusPanel(); return openTask(f.task_id); }
+    if (a === 'stop' || a === 'done') {
+      const noteText = focusNoteValue();
+      clearTimeout(focusNoteTimer); focusNoteDirty = false;
+      wrap.remove();
+      const r = await focusAction('stop', { note: noteText });
+      const min = Math.max(1, Math.round((r.stopped?.elapsed_sec || 0) / 60));
+      if (a === 'done' && f.task_id && byId(f.task_id)) await complete(f.task_id);
+      else toast(`Fokus beendet · ${fmtDuration(min)}${noteText.trim() ? ' · Notiz gespeichert' : ''}`);
+      focusHistoryCache = null;
+      if (S.route.name === 'focus') viewFocus();
       return;
     }
-    await focusAction(a, a === 'extend' ? { minutes: 5 } : undefined);
+    await saveFocusNote(true);
+    if (a === 'add') { await focusAction('extend', { minutes: +b.dataset.min }); toast(`+${b.dataset.min} Min.`); }
+    else await focusAction(a);
     openFocusPanel();
   });
+}
+
+// ---------------------------------------------------------------- focus history view
+let focusHistoryCache = store.get('focusHistory', null);
+async function viewFocus() {
+  setTitle('Fokus', 'Deine Fokus-Zeiten und Notizen');
+  const draw = (list) => {
+    if (S.route.name !== 'focus') return;
+    if (!list) { $('#content').innerHTML = '<div class="empty">Lädt …</div>'; return; }
+    const head = S.focus ? `<button class="fh-live" data-focus-panel>${viewIcon('focus')}<span><b>Läuft gerade:</b> ${esc(S.focus.title)}</span><span class="fh-live-time">${fmtClock(focusRemaining())}</span></button>` : '';
+    if (!list.length) { $('#content').innerHTML = head + emptyHtml('⏱', 'Noch keine Fokus-Zeiten. Starte einen Fokus in einer Aufgabe.'); return; }
+    const byDay = new Map();
+    for (const x of list) { const d = localDateOf(x.ended_at); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(x); }
+    let html = head;
+    for (const [d, xs] of byDay) {
+      const sum = xs.reduce((n, x) => n + (x.actual_sec || 0), 0);
+      html += `<div class="section-title">${relDate(d, S.today)}<span class="n">${fmtDuration(Math.max(1, Math.round(sum / 60)))}</span></div>`;
+      html += xs.map((x) => `<div class="fh-row"${x.task_id ? ` data-task="${x.task_id}"` : ''}>
+        <div class="fh-time">${timeOf(x.started_at)}</div>
+        <div class="fh-body"><div class="fh-title">${x.task_completed_at ? '✓ ' : ''}${esc(x.title)}</div>
+          <div class="fh-meta">${fmtDuration(Math.max(1, Math.round((x.actual_sec || 0) / 60)))} von ${fmtDuration(x.planned_min)}</div>
+          ${x.note ? `<div class="fh-note">${esc(x.note)}</div>` : ''}</div></div>`).join('');
+    }
+    $('#content').innerHTML = html;
+  };
+  draw(focusHistoryCache);
+  try {
+    const r = await api('/focus/history?limit=150');
+    focusHistoryCache = r.sessions; store.set('focusHistory', focusHistoryCache);
+    draw(focusHistoryCache);
+  } catch { /* offline: cached */ }
 }
 
 // ---------------------------------------------------------------- settings
@@ -1392,17 +1485,7 @@ async function viewSettings() {
 
     <div class="panel">
       <h2>Fokus-Timer</h2>
-      <p>Starte den Timer in einer Aufgabe (▶︎ Fokus). Die Zeit wird an der Aufgabe gespeichert, am Ende kommt eine Push-Nachricht.</p>
-      <label class="dlg-check" style="padding:4px 0 8px"><input type="checkbox" data-act="focus-shortcut" ${store.get('focusShortcut', false) ? 'checked' : ''}><span><b>Timer auch in der Dynamic Island (iPhone)</b><small>Startet zusätzlich den Timer der Uhr-App über einen Kurzbefehl (pro Gerät)</small></span></label>
-      <details><summary style="cursor:pointer;font-weight:600;font-size:14px">Kurzbefehl einrichten (einmalig)</summary>
-        <ol>
-          <li>App <b>Kurzbefehle</b> → <b>+</b> → Name exakt: <b>NTD Fokus</b></li>
-          <li>Im Aktionen-Suchfeld <b>„Timer“</b> eingeben → die Aktion der App <b>Uhr</b> wählen, die einen Timer <b>startet</b> (Name kann je nach iOS-Version abweichen).</li>
-          <li>Bei der Dauer auf die Zahl tippen → als Variable die <b>Kurzbefehl-Eingabe</b> wählen, Einheit <b>Minuten</b>. Wird sie nicht angeboten: oben <b>ⓘ</b> → Kurzbefehl darf <b>Eingaben empfangen</b> (Text).</li>
-          <li>Test: Kurzbefehl von Hand starten, <b>1</b> eingeben → Timer erscheint in der Dynamic Island.</li>
-          <li>Fertig. Beim Fokus-Start öffnet NTD's kurz die Kurzbefehle-App, der Timer läuft dann in der Dynamic Island. Zurück zur App: von unten wischen bzw. oben links „◀ NTD's“.</li>
-        </ol>
-      </details>
+      <p>Starte den Timer in einer Aufgabe (▶︎ Fokus). Während er läuft, zeigt NTD's den Fokus groß an – mit +5/+10/+15 Min. und einer Notiz. Zeit und Notiz landen im Tab <b>Fokus</b>, am Ende kommt eine Push-Nachricht.</p>
     </div>
 
     <div class="panel">
@@ -1482,9 +1565,6 @@ async function settingsAction(act, el) {
     }
     store.set('tabs', sel);
     renderTabSettings(); renderNav();
-  } else if (act === 'focus-shortcut') {
-    store.set('focusShortcut', el.checked);
-    toast(el.checked ? 'Dynamic Island an' : 'Dynamic Island aus');
   } else if (act === 'dash-up' || act === 'dash-down' || act === 'dash-toggle') {
     const cfg = dashConfig();
     const k = el.dataset.card;

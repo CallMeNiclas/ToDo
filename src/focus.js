@@ -9,7 +9,7 @@ export function focusView(s) {
   const now = Date.now();
   const pausedNow = s.paused_at ? Math.floor((now - Date.parse(s.paused_at)) / 1000) : 0;
   const elapsed = Math.max(0, Math.floor((now - Date.parse(s.started_at)) / 1000) - s.paused_sec - pausedNow);
-  return { id: s.id, task_id: s.task_id, title: s.title, planned_min: s.planned_min, started_at: s.started_at, paused: !!s.paused_at, elapsed_sec: elapsed, remaining_sec: s.planned_min * 60 - elapsed };
+  return { id: s.id, task_id: s.task_id, title: s.title, planned_min: s.planned_min, started_at: s.started_at, paused: !!s.paused_at, elapsed_sec: elapsed, remaining_sec: s.planned_min * 60 - elapsed, note: s.note || '' };
 }
 
 export async function activeFocus(env) {
@@ -46,12 +46,46 @@ export async function extendFocus(env, minutes) {
   return activeFocus(env);
 }
 
-/** Ends the active session and books the time on the task. */
-export async function stopFocus(env) {
+const cleanNote = (n) => String(n ?? '').slice(0, 5000);
+
+// The note column is added on first use instead of via a migration file, so the code also
+// works if the deploy does not run migrations (ALTER is a no-op error once it exists).
+let noteCol = false;
+async function ensureNoteCol(env) {
+  if (noteCol) return;
+  try { await env.DB.prepare('SELECT note FROM focus_sessions LIMIT 1').first(); }
+  catch { await env.DB.prepare("ALTER TABLE focus_sessions ADD COLUMN note TEXT NOT NULL DEFAULT ''").run().catch(() => {}); }
+  noteCol = true;
+}
+
+/** Saves the note of the running session (autosave while typing). */
+export async function setFocusNote(env, note) {
+  await ensureNoteCol(env);
+  const s = await env.DB.prepare('SELECT id FROM focus_sessions WHERE ended_at IS NULL LIMIT 1').first();
+  if (!s) throw new InputError('Kein Fokus aktiv');
+  await env.DB.prepare('UPDATE focus_sessions SET note = ? WHERE id = ?').bind(cleanNote(note), s.id).run();
+  return activeFocus(env);
+}
+
+/** Finished sessions, newest first – the "Fokus" view. */
+export async function focusHistory(env, limit = 100) {
+  await ensureNoteCol(env);
+  const { results } = await env.DB.prepare(
+    `SELECT f.id, f.task_id, f.title, f.planned_min, f.started_at, f.ended_at, f.actual_sec, f.note, t.completed_at AS task_completed_at
+     FROM focus_sessions f LEFT JOIN tasks t ON t.id = f.task_id
+     WHERE f.ended_at IS NOT NULL ORDER BY f.ended_at DESC LIMIT ?`,
+  ).bind(Math.min(500, limit)).all();
+  return results;
+}
+
+/** Ends the active session and books the time on the task. `note` (optional) is saved with it. */
+export async function stopFocus(env, { note } = {}) {
+  await ensureNoteCol(env);
   const s = await env.DB.prepare('SELECT * FROM focus_sessions WHERE ended_at IS NULL LIMIT 1').first();
   if (!s) return null;
   const v = focusView(s);
-  await env.DB.prepare('UPDATE focus_sessions SET ended_at = ?, paused_at = NULL, actual_sec = ? WHERE id = ?').bind(nowIso(), v.elapsed_sec, s.id).run();
+  await env.DB.prepare('UPDATE focus_sessions SET ended_at = ?, paused_at = NULL, actual_sec = ?, note = ? WHERE id = ?')
+    .bind(nowIso(), v.elapsed_sec, note === undefined ? (s.note || '') : cleanNote(note), s.id).run();
   if (s.task_id) await env.DB.prepare('UPDATE tasks SET focus_sec = focus_sec + ? WHERE id = ?').bind(v.elapsed_sec, s.task_id).run();
   return { ...v, ended: true };
 }
