@@ -1020,3 +1020,26 @@ svg.title-vi { width: 30px; height: 30px; }
 .day-col { background: transparent; border-color: var(--line); }
 .block { border-radius: 9px; }
 .hour span { background: var(--bg); }
+
+/* ---------- warm cream white (light mode) + more visible checkboxes ---------- */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fbf8f2;
+    --surface: #fbf8f2;
+    --surface-2: #f2eee5;
+    --surface-3: #e6e1d6;
+    --line: #ebe6dc;
+    --p4: #a9a49b;
+  }
+  .drawer-panel, .qa-card, .due-card, .modal .qa-card { background: #fffdf9; }
+  .menu-btn { background: #fffdf9; }
+}
+@media (min-width: 861px) and (prefers-color-scheme: light) { .sidebar { background: #f4f0e7; } }
+.task .check { border-width: 2px; background: color-mix(in srgb, var(--surface) 40%, #fff); }
+.task.prio-4 .check { border-color: var(--p4); }
+.task .check:hover { border-color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  :root { --p4: #7c7c82; }
+  .task .check { background: #232325; }
+}
+@media (pointer: coarse) { .task .check { border-width: 2.2px; } }

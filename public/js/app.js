@@ -193,6 +193,7 @@ async function boot() {
 }
 
 function start() {
+  if (!/^#\/task\//.test(location.hash)) history.replaceState(null, '', '#/today');
   $('#login').hidden = true;
   $('#app').hidden = false;
   for (const [k, v] of Object.entries(store.get('cal', {}))) S.cal.set(k, { at: 0, data: v });
@@ -590,14 +591,14 @@ function parseRoute() {
   if (name === 'project' && arg) return { name, arg };
   if (name === 'label' && arg) return { name, arg };
   if (name === 'search') return { name, arg: arg || '' };
-  return { name: 'dashboard' };
+  return { name: 'today' };
 }
 
 function route() {
   const r = parseRoute();
   if (r.name === 'task') {
     // open detail over the current (or default) view
-    if (!S.route || S.route.name === 'task') S.route = { name: 'dashboard' };
+    if (!S.route || S.route.name === 'task') S.route = { name: 'today' };
     openTask(r.id, false);
     render();
     return;
