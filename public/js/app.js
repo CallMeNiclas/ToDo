@@ -1397,8 +1397,9 @@ async function viewSettings() {
       <details><summary style="cursor:pointer;font-weight:600;font-size:14px">Kurzbefehl einrichten (einmalig)</summary>
         <ol>
           <li>App <b>Kurzbefehle</b> → <b>+</b> → Name exakt: <b>NTD Fokus</b></li>
-          <li>Aktion <b>„Timer starten“</b> hinzufügen.</li>
-          <li>Bei der Dauer auf die Zahl tippen → Variable <b>„Kurzbefehl-Eingabe“</b> wählen, Einheit <b>Minuten</b>.</li>
+          <li>Im Aktionen-Suchfeld <b>„Timer“</b> eingeben → die Aktion der App <b>Uhr</b> wählen, die einen Timer <b>startet</b> (Name kann je nach iOS-Version abweichen).</li>
+          <li>Bei der Dauer auf die Zahl tippen → als Variable die <b>Kurzbefehl-Eingabe</b> wählen, Einheit <b>Minuten</b>. Wird sie nicht angeboten: oben <b>ⓘ</b> → Kurzbefehl darf <b>Eingaben empfangen</b> (Text).</li>
+          <li>Test: Kurzbefehl von Hand starten, <b>1</b> eingeben → Timer erscheint in der Dynamic Island.</li>
           <li>Fertig. Beim Fokus-Start öffnet NTD's kurz die Kurzbefehle-App, der Timer läuft dann in der Dynamic Island. Zurück zur App: von unten wischen bzw. oben links „◀ NTD's“.</li>
         </ol>
       </details>
