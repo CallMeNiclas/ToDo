@@ -203,6 +203,7 @@ function start() {
   setupUpdates();
   bindGlobal();
   bindDnd();
+  bindTimelineDrag();
   route();
   renderSync();
   if (queue.length && net.online) sync();
@@ -275,7 +276,7 @@ function tickNow() {
   const now = new Date();
   const min = now.getHours() * 60 + now.getMinutes();
   const today = localDateOf(now.toISOString());
-  for (const tl of $$('.timeline[data-date]')) {
+  for (const tl of $$('.timeline[data-date], .tl-col[data-date]')) {
     if (tl.dataset.date !== today) continue;
     const startH = +tl.dataset.start, px = +tl.dataset.px, endH = +tl.dataset.end;
     if (min < startH * 60 || min > endH * 60) continue;
@@ -913,9 +914,15 @@ function viewWeek() {
   setTitle(title, `${range} · ${tasksIn.length} Aufg.${mins ? ' · ' + fmtShort(mins) : ''}`);
   const back = addDays(start, -span), fwd = addDays(start, span);
   $('#top-actions').innerHTML = `<div class="week-nav"><a class="icon-btn" href="#/week/${back}" aria-label="Zurück">${icon('left')}</a>${containsToday ? '' : '<a class="btn sm" href="#/week">Heute</a>'}<a class="icon-btn" href="#/week/${fwd}" aria-label="Weiter">${icon('right')}</a></div>`;
+  const timeline = span < 7 || window.innerWidth >= 1000;
   const draw = (data) => {
     const evs = data?.events || [];
     let html = `<div class="span-switch" role="tablist">${[1, 3, 7].map((n) => `<button class="${n === span ? 'on' : ''}" data-span="${n}">${n === 1 ? '1 Tag' : n + ' Tage'}</button>`).join('')}</div>`;
+    if (timeline) {
+      $('#content').innerHTML = html + weekTimelineHtml(start, span, evs, containsToday) + (data && !data.connected ? `<div class="cal-note">Termine fehlen: Google Kalender ist nicht verbunden.</div>` : '');
+      tickNow();
+      return;
+    }
     html += `<div class="week span-${span}">`;
     for (let i = 0; i < span; i++) {
       const d = addDays(start, i);
@@ -943,6 +950,188 @@ function viewWeek() {
   draw(cachedEvents(from, to));
   const routeAtStart = location.hash;
   events(from, to).then((d) => { if (location.hash === routeAtStart && S.route.name === 'week') draw(d); });
+}
+
+// ---------------------------------------------------------------- week as a time line
+// Columns per day with an hour grid: calendar events (fixed) and tasks with a time (draggable).
+// Tasks without a time sit in the head of their day and can be dragged into the grid.
+const TL_PX = 52;      // pixels per hour
+const TL_SNAP = 15;    // minutes
+function weekTimelineHtml(start, span, evs, containsToday) {
+  const days = [];
+  for (let i = 0; i < span; i++) days.push(addDays(start, i));
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const cols = days.map((d) => {
+    const isToday = d === S.today;
+    let tasks = scoped().filter((t) => t.due_date === d && !(containsToday && d < S.today));
+    if (isToday) tasks = [...scoped().filter((t) => t.due_date && t.due_date < S.today && !t.parent_id), ...tasks];
+    tasks = sortTasks(tasks);
+    const dayEv = eventsOn(evs, d);
+    const spanOf = (e) => [localDateOf(e.start) < d ? 0 : toMin(timeOf(e.start)), localDateOf(e.end) > d ? 24 * 60 : toMin(timeOf(e.end))];
+    const fullDay = (e) => { const [a, b] = spanOf(e); return a === 0 && b >= 24 * 60; };
+    const allDayEv = dayEv.filter((e) => e.allDay || fullDay(e));
+    const items = [], bands = [];
+    for (const e of dayEv.filter((x) => !x.allDay && !fullDay(x))) {
+      const [a, b] = spanOf(e);
+      const it = { kind: 'event', s: a, e: Math.max(b, a + 15), title: e.title, sub: `${timeOf(e.start)}–${timeOf(e.end)}`, color: e.color, url: e.url };
+      (b - a >= 180 ? bands : items).push(it);
+    }
+    for (const t of tasks.filter((x) => x.due_time && x.due_date === d)) {
+      const a = toMin(t.due_time);
+      items.push({ kind: 'task', s: a, e: Math.min(24 * 60, a + Math.max(15, t.duration_min || 30)), t });
+    }
+    const untimed = tasks.filter((t) => !t.due_time || t.due_date !== d);
+    return { d, isToday, items, bands, allDayEv, untimed };
+  });
+  // visible hours: at least 7–21, stretched to fit everything
+  let h0 = 7, h1 = 21;
+  for (const c of cols) for (const it of [...c.items, ...c.bands]) { h0 = Math.min(h0, Math.floor(it.s / 60)); h1 = Math.max(h1, Math.ceil(it.e / 60)); }
+  if (containsToday) { h0 = Math.min(h0, Math.floor(nowMin / 60)); h1 = Math.max(h1, Math.ceil(nowMin / 60) + 1); }
+  h0 = Math.max(0, h0); h1 = Math.min(24, h1);
+  const H = (h1 - h0) * TL_PX;
+  const y = (m) => ((m - h0 * 60) / 60) * TL_PX;
+  const chip = (t, d) => `<div class="tl-chip prio-${t.priority}" data-task="${t.id}" data-drag-task="${t.id}"><button class="check" data-check="${t.id}" aria-label="Erledigen"></button><span>${esc(t.title)}</span>${t.due_date < d ? '<small class="tl-over">überfällig</small>' : t.duration_min ? `<small>${fmtDuration(t.duration_min)}</small>` : ''}</div>`;
+  let html = `<div class="tl-week" style="--cols:${span}">`;
+  // heads + all-day / untimed
+  html += `<div class="tl-row tl-heads"><div class="tl-gut"></div>${cols.map((c) => `<div class="tl-head${c.isToday ? ' is-today' : ''}${c.d < S.today ? ' is-past' : ''}"><span class="wd">${WD_SHORT[isoWeekday(c.d)]}</span><span class="dn">${+c.d.slice(8, 10)}.</span>${span === 1 ? `<span class="rel">${relDate(c.d, S.today)}</span>` : ''}</div>`).join('')}</div>`;
+  html += `<div class="tl-row tl-top"><div class="tl-gut"><span>ohne<br>Zeit</span></div>${cols.map((c) => `<div class="tl-cell" data-drop-day="${c.d}">
+      ${c.allDayEv.map((e) => `<div class="tl-allday" style="--c:${esc(e.color)}" data-url="${esc(e.url || '')}">${esc(e.title)}</div>`).join('')}
+      ${c.untimed.slice(0, 4).map((t) => chip(t, c.d)).join('')}
+      ${c.untimed.length > 4 ? `<details class="tl-more"><summary>+ ${c.untimed.length - 4} weitere</summary>${c.untimed.slice(4).map((t) => chip(t, c.d)).join('')}</details>` : ''}
+      ${c.d >= S.today ? `<button class="tl-add" data-add='${esc(JSON.stringify({ due_date: c.d }))}' aria-label="Aufgabe hinzufügen">${icon('plus')}</button>` : ''}
+    </div>`).join('')}</div>`;
+  // grid
+  html += `<div class="tl-row tl-grid" style="height:${H}px"><div class="tl-gut">${Array.from({ length: h1 - h0 + 1 }, (_, i) => `<span style="top:${i * TL_PX}px">${String(h0 + i).padStart(2, '0')}:00</span>`).join('')}</div>`;
+  for (const c of cols) {
+    layoutColumns(c.items);
+    html += `<div class="tl-col${c.isToday ? ' is-today' : ''}" data-date="${c.d}" data-start="${h0}" data-end="${h1}" data-px="${TL_PX}">`;
+    for (let h = h0; h <= h1; h++) html += `<div class="tl-hr" style="top:${(h - h0) * TL_PX}px"></div>`;
+    for (const b of c.bands) html += `<div class="tl-band" style="--c:${esc(b.color)};top:${y(b.s)}px;height:${y(b.e) - y(b.s)}px" data-url="${esc(b.url || '')}"><span>${esc(b.title)} · ${b.sub}</span></div>`;
+    for (const it of c.items) {
+      const top = y(it.s), height = Math.max(22, y(it.e) - top - 2), w = 100 / it.cols;
+      const pos = `top:${top}px;height:${height}px;left:calc(${it.col * w}% + 2px);width:calc(${w}% - 4px)`;
+      const past = c.d < S.today || (c.isToday && it.e <= nowMin) ? ' past' : '';
+      if (it.kind === 'event') {
+        html += `<div class="block${past}" data-end="${it.e}" style="--c:${esc(it.color)};${pos}" data-url="${esc(it.url || '')}"><b>${esc(it.title)}</b>${height > 34 ? `<small>${esc(it.sub)}</small>` : ''}</div>`;
+      } else {
+        const t = it.t, color = t.priority === 4 ? 'var(--accent)' : `var(--p${t.priority})`;
+        html += `<div class="block task-block tl-task${past}" data-end="${it.e}" style="--c:${color};${pos}" data-task="${t.id}" data-drag-task="${t.id}"><b><button class="check mini" data-check="${t.id}" aria-label="Erledigen"></button>${esc(t.title)}</b>${height > 34 ? `<small>${t.due_time}${t.duration_min ? ' · ' + fmtDuration(t.duration_min) : ''}</small>` : ''}</div>`;
+      }
+    }
+    if (c.isToday && nowMin >= h0 * 60 && nowMin <= h1 * 60) html += `<div class="now-line" style="top:${y(nowMin)}px"></div>`;
+    html += '</div>';
+  }
+  html += '</div></div>';
+  return html;
+}
+
+// dragging tasks on the time line: mouse = press + move, touch = hold 0.35 s
+const tl = { src: null, ghost: null, mark: null, sx: 0, sy: 0, offY: 0, timer: null, active: false, endAt: 0, drop: null };
+function tlStart(el, x, y) {
+  const t = byId(el.dataset.dragTask);
+  if (!t) return;
+  tl.active = true; tl.src = el;
+  const r = el.getBoundingClientRect();
+  tl.offY = el.classList.contains('tl-task') ? y - r.top : 0;
+  const g = el.cloneNode(true);
+  g.classList.add('tl-ghost');
+  g.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${Math.max(140, r.width)}px;height:${r.height}px;--c:${getComputedStyle(el).getPropertyValue('--c') || 'var(--accent)'}`;
+  g.dataset.dx = x - r.left;
+  document.body.appendChild(g);
+  tl.ghost = g;
+  el.classList.add('tl-src');
+  document.body.classList.add('dnd-on');
+  navigator.vibrate?.(15);
+  tlMove(x, y);
+}
+function tlMove(x, y) {
+  if (!tl.active) return;
+  tl.ghost.style.left = (x - +tl.ghost.dataset.dx) + 'px';
+  tl.ghost.style.top = (y - tl.offY - (tl.offY ? 0 : 12)) + 'px';
+  tl.mark?.remove(); tl.mark = null; tl.drop = null;
+  $$('.tl-cell.drop').forEach((c) => c.classList.remove('drop'));
+  const el = document.elementFromPoint(x, y);
+  const col = el?.closest('.tl-col');
+  const cell = el?.closest('.tl-cell');
+  const t = byId(tl.src.dataset.dragTask);
+  if (col) {
+    const r = col.getBoundingClientRect();
+    const h0 = +col.dataset.start, px = +col.dataset.px;
+    let m = h0 * 60 + ((y - tl.offY - r.top) / px) * 60;
+    m = Math.max(0, Math.min(24 * 60 - TL_SNAP, Math.round(m / TL_SNAP) * TL_SNAP));
+    const hm = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const dur = Math.max(15, t?.duration_min || 30);
+    tl.mark = document.createElement('div');
+    tl.mark.className = 'tl-mark';
+    tl.mark.style.top = ((m - h0 * 60) / 60) * px + 'px';
+    tl.mark.style.height = (dur / 60) * px + 'px';
+    tl.mark.textContent = hm;
+    col.appendChild(tl.mark);
+    tl.drop = { date: col.dataset.date, time: hm };
+  } else if (cell) {
+    cell.classList.add('drop');
+    tl.drop = { date: cell.dataset.dropDay, time: null };
+  }
+  // auto-scroll near the edges
+  const edge = 70;
+  if (y < edge) window.scrollBy(0, -10); else if (y > window.innerHeight - edge - 60) window.scrollBy(0, 10);
+}
+async function tlEnd(cancel) {
+  clearTimeout(tl.timer); tl.timer = null;
+  if (!tl.active) { tl.src = null; return; }
+  tl.active = false; tl.endAt = Date.now();
+  document.body.classList.remove('dnd-on');
+  tl.ghost?.remove(); tl.mark?.remove(); tl.mark = null;
+  $$('.tl-cell.drop').forEach((c) => c.classList.remove('drop'));
+  tl.src?.classList.remove('tl-src');
+  const id = tl.src?.dataset.dragTask, drop = tl.drop;
+  tl.src = null; tl.drop = null;
+  const t = id && byId(id);
+  if (cancel || !t || !drop) return;
+  if (t.due_date === drop.date && (t.due_time || null) === drop.time) return;
+  const patch = { due_date: drop.date, due_time: drop.time };
+  if (!drop.time && t.due_time) patch.reminders = (t.reminders || []).filter((r) => r.at);
+  try {
+    await saveTask(id, patch);
+    toast(drop.time ? `${relDate(drop.date, S.today)}, ${drop.time} Uhr` : `${relDate(drop.date, S.today)} · ohne Uhrzeit`);
+  } catch { /* saveTask shows the error */ }
+}
+function bindTimelineDrag() {
+  const pick = (e) => (e.target.closest('.tl-week [data-drag-task]') && !e.target.closest('button') ? e.target.closest('[data-drag-task]') : null);
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const el = pick(e);
+    if (!el) return;
+    tl.src = el; tl.sx = e.clientX; tl.sy = e.clientY;
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!tl.src) return;
+    if (!tl.active) { if (Math.hypot(e.clientX - tl.sx, e.clientY - tl.sy) < 6) return; tlStart(tl.src, e.clientX, e.clientY); }
+    e.preventDefault();
+    tlMove(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', () => tlEnd(false));
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    const el = pick(e);
+    if (!el) return;
+    const p = e.touches[0];
+    tl.sx = p.clientX; tl.sy = p.clientY;
+    clearTimeout(tl.timer);
+    tl.timer = setTimeout(() => tlStart(el, tl.sx, tl.sy), 350);
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    const p = e.touches[0];
+    if (!tl.active) { if (tl.timer && Math.hypot(p.clientX - tl.sx, p.clientY - tl.sy) > 8) { clearTimeout(tl.timer); tl.timer = null; } return; }
+    e.preventDefault();
+    tlMove(p.clientX, p.clientY);
+  }, { passive: false });
+  document.addEventListener('touchend', () => tlEnd(false));
+  document.addEventListener('touchcancel', () => tlEnd(true));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && tl.active) tlEnd(true); });
+  document.addEventListener('click', (e) => { if (Date.now() - tl.endAt < 350) { e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('contextmenu', (e) => { if (tl.active || tl.timer) e.preventDefault(); });
 }
 
 function isoWeekNo(d) {
