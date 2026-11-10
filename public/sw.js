@@ -1,5 +1,5 @@
 // Service worker: offline app shell, push notifications, notification clicks.
-const CACHE = 'todo-shell-v39';
+const CACHE = 'todo-shell-v40';
 const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/parse.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

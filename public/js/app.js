@@ -71,6 +71,8 @@ function viewIcon(name, cls = 'vi') {
 }
 /** project symbol: ring in the project color, like a progress circle */
 function projectIcon(p, cls = 'vi') {
+  // main projects (areas) get a cube, normal projects the progress ring
+  if (p?.is_main) return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true" style="color:${esc(p.color || '#8E8E93')}"><path d="M12 2.8 20.2 7.2v9.6L12 21.2 3.8 16.8V7.2z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M3.8 7.2 12 11.6l8.2-4.4M12 11.6v9.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
   return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true" style="color:${esc(p?.color || '#8E8E93')}"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.2a4.8 4.8 0 0 1 4.8 4.8H12z" fill="currentColor" stroke="none"/></svg>`;
 }
 const icon = (name, extra = '') => `<svg viewBox="0 0 24 24" ${extra}>${P[name].replace('{d}', S.today ? +S.today.slice(8, 10) : '')}</svg>`;
@@ -1038,7 +1040,7 @@ function viewProject(id) {
     const list = open().filter((t) => kidIds.has(t.project_id));
     const grandKids = childProjects(k.id).length;
     html += `<div class="panel subproject">
-      <div class="panel-head"><a class="sub-head" href="#/project/${k.id}"><span class="dot" style="background:${esc(k.color)}"></span><h2>${esc(k.name)}</h2><span class="meta">${list.filter((t) => !t.parent_id).length || ''}${grandKids ? ` · ${grandKids} Unterprojekt${grandKids === 1 ? '' : 'e'}` : ''}</span>${icon('right')}</a></div>
+      <div class="panel-head"><a class="sub-head" href="#/project/${k.id}">${projectIcon(k)}<h2>${esc(k.name)}</h2><span class="meta">${list.filter((t) => !t.parent_id).length || ''}${grandKids ? ` · ${grandKids} Unterprojekt${grandKids === 1 ? '' : 'e'}` : ''}</span>${icon('right')}</a></div>
       <div class="section" data-drop-project="${k.id}" style="padding-top:0">${list.length ? nestedList(list, { showProject: grandKids > 0, manual: true }) : '<div class="empty" style="padding:10px 16px">Keine offenen Aufgaben.</div>'}${addInline({ project_id: k.id })}</div></div>`;
   }
   $('#content').innerHTML = html;
