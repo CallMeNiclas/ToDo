@@ -7,7 +7,7 @@ const { chromium, devices } = require('playwright');
   await p.route('**/api/calendar*', (r) => r.fulfill({ json: { connected: true, events: [] } }));
   // simulate a slow server (1.5 s) for completes to prove the UI no longer waits
   await p.route('**/api/tasks/*/complete', async (r) => { await new Promise((res) => setTimeout(res, 1500)); r.continue(); });
-  await p.goto('http://localhost:8787/auth/dev'); await p.waitForSelector('.dash');
+  await p.goto('http://localhost:8787/auth/dev'); await p.waitForSelector('#app:not([hidden])');
   const api = (path, method, body) => p.evaluate(([path, method, body]) => fetch('/api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()), [path, method, body]);
   await api('/mode', 'POST', { mode: 'all' });
   const a = await api('/tasks', 'POST', { title: 'SNAP Einmalig', due_date: '2026-11-05' });
