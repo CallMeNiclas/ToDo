@@ -51,6 +51,26 @@ const P = {
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>',
 };
+// ---------------------------------------------------------------- view symbols (filled, colored)
+const VI = {
+  dashboard: ['#5B7FD6', '<rect x="3" y="3" width="8" height="8" rx="2.2"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2.2"/>'],
+  today: ['#F5C33B', '<path d="M12 2.6l2.75 5.75 6.3.8-4.62 4.37 1.17 6.24L12 16.7l-5.6 3.06 1.17-6.24L2.95 9.15l6.3-.8z" stroke-linejoin="round" stroke-width="1.6" stroke="currentColor"/>'],
+  week: ['#E5484D', '<rect x="3" y="4.5" width="18" height="16.5" rx="3.5"/><rect x="3" y="4.5" width="18" height="5" rx="2" fill="#fff" opacity=".28"/><g fill="#fff"><circle cx="8" cy="13.5" r="1.2"/><circle cx="12" cy="13.5" r="1.2"/><circle cx="16" cy="13.5" r="1.2"/><circle cx="8" cy="17.3" r="1.2"/><circle cx="12" cy="17.3" r="1.2"/></g><rect x="7" y="2.5" width="2" height="4" rx="1"/><rect x="15" y="2.5" width="2" height="4" rx="1"/>'],
+  upcoming: ['#2FA39A', '<path d="M12 3 2.8 7.7 12 12.4l9.2-4.7z"/><path d="M4.6 11.2 2.8 12.1 12 16.8l9.2-4.7-1.8-.9L12 15z" opacity=".75"/><path d="M4.6 15.6 2.8 16.5 12 21.2l9.2-4.7-1.8-.9L12 19.4z" opacity=".5"/>'],
+  inbox: ['#3D8BF2', '<rect x="3" y="3.5" width="18" height="17" rx="4"/><path d="M3 13.5h5.2l1.3 2.3h5l1.3-2.3H21V17a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 17z" fill="#fff" opacity=".9"/>'],
+  completed: ['#45B26B', '<rect x="4" y="2.5" width="15" height="19" rx="3"/><rect x="4" y="2.5" width="3.2" height="19" rx="1.5" fill="#000" opacity=".12"/><path d="M8.8 12.3l2.4 2.4 4.6-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+  search: ['#8E8E93', '<circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>'],
+  settings: ['#8E8E93', '<path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="15" cy="7" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="17" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/>'],
+  label: ['#8E8E93', '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1.6" fill="#fff"/>'],
+};
+function viewIcon(name, cls = 'vi') {
+  const v = VI[name];
+  return v ? `<svg class="${cls}" viewBox="0 0 24 24" style="color:${v[0]}" fill="currentColor" stroke="none" aria-hidden="true">${v[1]}</svg>` : '';
+}
+/** project symbol: ring in the project color, like a progress circle */
+function projectIcon(p, cls = 'vi') {
+  return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true" style="color:${esc(p?.color || '#8E8E93')}"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.2a4.8 4.8 0 0 1 4.8 4.8H12z" fill="currentColor" stroke="none"/></svg>`;
+}
 const icon = (name, extra = '') => `<svg viewBox="0 0 24 24" ${extra}>${P[name].replace('{d}', S.today ? +S.today.slice(8, 10) : '')}</svg>`;
 
 // ---------------------------------------------------------------- offline storage
@@ -619,11 +639,12 @@ function renderNav() {
   const item = (href, ic, label, count, cls = '', key = '') =>
     `<a href="${href}" class="nav-item${cls}" ${key}>${ic}<span>${esc(label)}</span>${count !== undefined && count !== '' ? `<span class="count">${count}</span>` : ''}</a>`;
   $('#nav-main').innerHTML =
-    item('#/dashboard', icon('grid'), 'Übersicht', '', active('dashboard')) +
-    item('#/today', icon('today'), 'Heute', c.today + c.overdue || '', active('today')).replace('class="count"', c.overdue ? 'class="count alert"' : 'class="count"') +
-    item('#/week', icon('week'), 'Diese Woche', c.week || '', active('week')) +
-    item('#/upcoming', icon('upcoming'), 'Demnächst', '', active('upcoming')) +
-    item('#/inbox', icon('inbox'), 'Eingang', c.inbox || '', active('inbox'));
+    item('#/inbox', viewIcon('inbox'), 'Eingang', c.inbox || '', active('inbox')) +
+    '<div class="nav-gap"></div>' +
+    item('#/dashboard', viewIcon('dashboard'), 'Übersicht', '', active('dashboard')) +
+    item('#/today', viewIcon('today'), 'Heute', c.today + c.overdue || '', active('today')).replace('class="count"', c.overdue ? 'class="count alert"' : 'class="count"') +
+    item('#/week', viewIcon('week'), 'Diese Woche', c.week || '', active('week')) +
+    item('#/upcoming', viewIcon('upcoming'), 'Demnächst', '', active('upcoming'));
 
   const perProject = new Map();
   for (const t of open()) if (!t.parent_id) perProject.set(t.project_id, (perProject.get(t.project_id) || 0) + 1);
@@ -634,7 +655,7 @@ function renderNav() {
     const toggle = hasKids
       ? `<button class="tree-toggle${collapsed[p.id] ? '' : ' open'}" data-toggle-project="${p.id}" aria-label="${collapsed[p.id] ? 'Aufklappen' : 'Zuklappen'}">${icon('right')}</button>`
       : '<span class="tree-toggle-space"></span>';
-    return `<a href="#/project/${p.id}" class="nav-item${active('project', p.id)}" style="padding-left:${4 + depth * 18}px">${toggle}<span class="dot" style="background:${esc(p.color)}"></span><span class="nav-name${p.is_main ? ' main' : ''}">${esc(p.name)}</span>${!p.parent_id && p.context ? `<span class="ctx-mark" title="${p.context === 'work' ? 'Arbeit' : 'Privat'}">${p.context === 'work' ? '💼' : '🏠'}</span>` : ''}<span class="count">${n || ''}</span><button class="icon-btn sm nav-edit" data-edit-project="${p.id}" aria-label="Projekt bearbeiten">${icon('more')}</button></a>`;
+    return `<a href="#/project/${p.id}" class="nav-item${active('project', p.id)}" style="padding-left:${4 + depth * 18}px">${toggle}${projectIcon(p)}<span class="nav-name${p.is_main ? ' main' : ''}">${esc(p.name)}</span>${!p.parent_id && p.context ? `<span class="ctx-mark" title="${p.context === 'work' ? 'Arbeit' : 'Privat'}">${p.context === 'work' ? '💼' : '🏠'}</span>` : ''}<span class="count">${n || ''}</span><button class="icon-btn sm nav-edit" data-edit-project="${p.id}" aria-label="Projekt bearbeiten">${icon('more')}</button></a>`;
   }).join('') || '<div class="nav-item" style="color:var(--faint);cursor:default">Noch keine Projekte</div>';
 
   const labels = allLabels();
@@ -681,7 +702,9 @@ function renderTabSettings() {
 }
 
 function setTitle(title, sub) {
-  $('#view-title').textContent = title;
+  const r = S.route || {};
+  const ic = r.name === 'project' ? projectIcon(project(r.arg), 'vi title-vi') : viewIcon(r.name, 'vi title-vi');
+  $('#view-title').innerHTML = ic + `<span>${esc(title)}</span>`;
   $('#view-sub').textContent = sub || '';
 }
 

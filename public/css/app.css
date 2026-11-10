@@ -707,7 +707,7 @@ body[data-mode="holiday"] .mode-pill { border-color: color-mix(in srgb, #f59e0b 
 body[data-mode="work"] .topbar { box-shadow: inset 0 -2px 0 color-mix(in srgb, #3f51b5 70%, transparent); }
 body[data-mode="private"] .topbar { box-shadow: inset 0 -2px 0 color-mix(in srgb, #10b981 60%, transparent); }
 body[data-mode="holiday"] .topbar { box-shadow: inset 0 -2px 0 color-mix(in srgb, #f59e0b 70%, transparent); }
-@media (prefers-color-scheme: light) { @media (max-width: 860px) { .mode-card { max-width: 420px; }
+.mode-card { max-width: 420px; }
 .mode-opt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 13px 14px; margin: 4px 0; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 16px; }
 .mode-opt:hover { background: var(--surface-2); }
 .mode-opt.on { border-color: var(--accent); background: var(--accent-soft); }
@@ -847,3 +847,176 @@ button.nav-item { border: 0; background: transparent; font: inherit; width: 100%
   .due-later { flex-wrap: nowrap; gap: 6px; }
   .due-later .btn { padding: 9px 4px; font-size: 14px; min-height: 0; }
 }
+
+/* =====================================================================
+   Calm theme (11/2026): white space, big bold titles with colored symbols,
+   no card frames, rounded-square checkboxes, one blue accent.
+   Sizes for touch stay large (see touch sections above); this layer only
+   changes the look.
+   ===================================================================== */
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2f2f5;
+  --surface-3: #e5e5ea;
+  --fg: #1c1c1e;
+  --fg-2: #3a3a3c;
+  --muted: #8e8e93;
+  --faint: #b8b8be;
+  --line: #ececf0;
+  --accent: #2f7cf6;
+  --accent-soft: #e9f1fe;
+  --accent-fg: #ffffff;
+  --danger: #e5484d;
+  --ok: #34a853;
+  --p1: #e5484d;
+  --p2: #f08c00;
+  --p3: #2f7cf6;
+  --p4: #c7c7cc;
+  --shadow: none;
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, .16), 0 2px 8px rgba(0, 0, 0, .06);
+  --radius: 16px;
+  --sidebar: 268px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --surface-3: #3a3a3c;
+    --fg: #f2f2f7;
+    --fg-2: #d1d1d6;
+    --muted: #8e8e93;
+    --faint: #636366;
+    --line: #2c2c2e;
+    --accent: #4c9bff;
+    --accent-soft: #1d2b42;
+    --accent-fg: #ffffff;
+    --danger: #ff6369;
+    --ok: #4cc26f;
+    --p1: #ff6369;
+    --p2: #ffa33a;
+    --p3: #4c9bff;
+    --p4: #636366;
+    --shadow: none;
+    --shadow-lg: 0 18px 50px rgba(0, 0, 0, .6);
+  }
+}
+body { font-size: 15.5px; }
+
+/* ---------- colored view symbols ---------- */
+svg.vi { fill: currentColor; stroke: none; width: 22px; height: 22px; flex: none; }
+.titles h1 { display: flex; align-items: center; gap: 12px; }
+.titles h1 > span { overflow: hidden; text-overflow: ellipsis; }
+svg.title-vi { width: 30px; height: 30px; }
+
+/* ---------- sidebar ---------- */
+.sidebar { border-right: 1px solid var(--line); background: var(--surface); padding-top: 16px; gap: 2px; }
+@media (min-width: 861px) { .sidebar { background: #f7f7f9; } }
+@media (min-width: 861px) and (prefers-color-scheme: dark) { .sidebar { background: #232325; } }
+.brand { display: none; }
+.search-pill {
+  display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 4px 14px;
+  background: var(--surface-3); color: var(--muted); border-radius: 12px; padding: 9px 12px; font-size: 15px; font-weight: 500;
+}
+@media (min-width: 861px) { .search-pill { background: color-mix(in srgb, var(--surface-3) 70%, transparent); } }
+.search-pill svg { width: 17px; height: 17px; }
+.search-pill.active { color: var(--accent); }
+.nav { gap: 0; }
+.nav-gap { height: 12px; }
+.nav-item { font-weight: 650; color: var(--fg); border-radius: 10px; padding: 7px 10px; gap: 12px; }
+.nav-item:hover { background: color-mix(in srgb, var(--surface-3) 55%, transparent); }
+.nav-item.active { background: color-mix(in srgb, var(--surface-3) 85%, transparent); color: var(--fg); }
+.nav-item .count { color: var(--faint); font-weight: 500; }
+.nav-item .count.alert { color: var(--danger); font-weight: 650; }
+#nav-projects .nav-item { font-weight: 500; }
+#nav-projects .nav-item svg.vi { width: 19px; height: 19px; }
+.nav-head { padding: 18px 10px 4px; font-size: 12.5px; letter-spacing: .02em; text-transform: none; color: var(--muted); font-weight: 600; }
+.sidebar-foot { border-top: 1px solid var(--line); padding-top: 10px; }
+.sidebar-foot .nav-item { color: var(--muted); font-weight: 500; }
+.sidebar-foot .nav-item svg { color: var(--muted); }
+
+/* ---------- top bar: big bold title, no bar ---------- */
+.topbar { background: color-mix(in srgb, var(--bg) 92%, transparent); padding-top: calc(22px + env(safe-area-inset-top)); padding-bottom: 12px; }
+.titles h1 { font-size: 30px; font-weight: 800; letter-spacing: -.025em; }
+.titles .sub { color: var(--muted); font-size: 14px; margin-top: 4px; margin-left: 42px; }
+.menu-btn { border-radius: 50%; width: 40px; height: 40px; background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0, 0, 0, .1), 0 0 0 1px var(--line); }
+.btn { border-color: var(--line); border-radius: 12px; font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: var(--accent); }
+.add-btn { border-radius: 999px; }
+.sync { border: 0; background: transparent; }
+.mode-pill { border: 0 !important; background: var(--surface-2) !important; }
+
+/* ---------- panels without frames ---------- */
+.panel, .stat, .dcard { background: transparent; border: 0; box-shadow: none; }
+.panel-head h2, .dcard-head h2 { font-size: 17px; font-weight: 750; }
+.section + .section { border-top: 0; }
+.section-title {
+  font-size: 15px; font-weight: 750; color: var(--accent); padding: 18px 16px 6px; margin: 0 16px 4px 16px; padding-left: 0; padding-right: 0;
+  border-bottom: 1px solid var(--line);
+}
+.section-title.overdue { color: var(--danger); }
+.section-title .n { color: var(--faint); }
+.empty { color: var(--faint); }
+
+/* overview cards: soft grey blocks instead of framed cards */
+.dcard { background: var(--surface-2); border-radius: 18px; }
+@media (prefers-color-scheme: dark) { .dcard { background: #242426; } }
+.stat { background: var(--surface-2); border-radius: 16px; }
+@media (prefers-color-scheme: dark) { .stat { background: #242426; } }
+
+/* ---------- task rows ---------- */
+.task { border-radius: 10px; padding-top: 10px; padding-bottom: 10px; align-items: center; }
+.task:hover { background: var(--surface-2); }
+.task .check {
+  border-radius: 6px; border-width: 1.6px; background: transparent; margin-top: 0;
+  border-color: color-mix(in srgb, var(--pc, var(--p4)) 85%, var(--p4));
+}
+.task.prio-4 .check { border-color: var(--p4); }
+.task .check svg { color: var(--accent); }
+.task.completed .check { background: var(--accent); border-color: var(--accent); }
+.task.completed .check svg { color: #fff; }
+.t-title { font-size: 16.5px; font-weight: 500; color: var(--fg); }
+.t-notes { color: var(--faint); }
+.t-meta { color: var(--muted); }
+.t-meta .today { color: var(--muted); }
+.t-meta .label { color: var(--muted); }
+.t-meta .label::before { content: ''; }
+.t-right { color: var(--faint); }
+.add-inline { color: var(--faint); }
+.add-inline svg { color: var(--faint); }
+.add-inline:hover, .add-inline:hover svg { color: var(--accent); }
+
+/* ---------- floating add button: round and blue ---------- */
+.fab { border-radius: 50% !important; background: var(--accent); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* ---------- tab bar: quiet ---------- */
+@media (max-width: 860px) {
+  .tabbar { background: color-mix(in srgb, var(--bg) 94%, transparent); border-top: 1px solid var(--line); }
+  .tabbar a { color: var(--faint); }
+  .tabbar a.active { color: var(--accent); }
+  .titles h1 { font-size: 28px; }
+  .titles .sub { margin-left: 40px; }
+  svg.title-vi { width: 28px; height: 28px; }
+  .topbar { padding-top: calc(14px + env(safe-area-inset-top)); }
+}
+@media (pointer: coarse) {
+  .titles h1 { font-size: 30px; }
+  .task .check { border-width: 1.8px; border-radius: 7px; }
+  .nav-item { font-size: 18px; }
+  #nav-projects .nav-item { font-size: 17px; }
+  svg.vi { width: 26px; height: 26px; }
+  #nav-projects .nav-item svg.vi { width: 22px; height: 22px; }
+  .search-pill { padding: 12px; font-size: 17px; border-radius: 14px; }
+}
+
+/* ---------- drawer, dialogs, quick add ---------- */
+.drawer-panel { background: var(--surface); }
+.qa-card, .due-card { border-radius: 20px; border: 0; }
+.qa-card input { font-weight: 600; }
+.toast { border-radius: 14px; }
+
+/* ---------- week / upcoming / timeline ---------- */
+.day-col { background: transparent; border-color: var(--line); }
+.block { border-radius: 9px; }
+.hour span { background: var(--bg); }
