@@ -192,6 +192,10 @@ function start() {
   let lastFocusRefresh = 0;
   window.addEventListener('focus', () => { if (Date.now() - lastFocusRefresh > 5000) { lastFocusRefresh = Date.now(); refresh(); tickNow(); } });
   setInterval(tickNow, 30000);
+  // due pop-ups: check every 15 s, only while the app is in front
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') activeSince = Date.now(); });
+  setInterval(checkDue, 15000);
+  setTimeout(checkDue, 3000);
   window.addEventListener('online', () => refresh());
   window.addEventListener('offline', () => setOnline(false));
 }
@@ -281,6 +285,7 @@ async function doRefresh({ force = false } = {}) {
     }
     const dayChanged = b.today !== S.today;
     applyBootstrap(b);
+    revalidateDue();
     markSynced(b, sig);
     if (dayChanged) S.cal.clear();
     const typing = document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
@@ -1536,6 +1541,7 @@ async function viewSettings() {
       <p>Push-Nachrichten auf jedem Gerät einzeln aktivieren (iPhone, iPad, PC).</p>
       ${isIos && !standalone ? '<p style="color:var(--p2)"><b>iPhone/iPad:</b> Öffne diese Seite in Safari → Teilen → „Zum Home-Bildschirm“. Starte die App dann vom Home-Bildschirm und aktiviere hier Push.</p>' : ''}
       <div class="row"><label>Dieses Gerät</label>${pushSupported ? (subscribed ? '<span class="status ok">Push aktiv</span> <button class="btn sm" data-act="push-test">Test senden</button> <button class="btn sm ghost" data-act="push-off">Deaktivieren</button>' : '<button class="btn primary sm" data-act="push-on">Push aktivieren</button>') : '<span class="status off">Hier nicht verfügbar</span>'}</div>
+      <div class="row"><label>Pop-up bei Fälligkeit</label><button class="btn sm" data-act="due-test">Pop-up testen</button></div>
       <div class="row"><label>Standard-Erinnerung</label><select data-setting="default_reminder_min">${[0, 5, 10, 15, 30, 60, 120].map((m) => `<option value="${m}" ${+s.default_reminder_min === m ? 'selected' : ''}>${m ? m + ' Min. vorher' : 'Zur Fälligkeit'}</option>`).join('')}</select></div>
       <div class="row"><label>Mail bei Prio 1 (nicht wiederkehrend)</label><select data-setting="mail_enabled"><option value="1" ${+s.mail_enabled ? 'selected' : ''}>An</option><option value="0" ${+s.mail_enabled ? '' : 'selected'}>Aus</option></select></div>
       <div class="row"><label>Mail-Zeit für Prio 1 ohne Uhrzeit</label><input type="time" data-setting="p1_mail_time" value="${esc(s.p1_mail_time)}"></div>
@@ -1670,6 +1676,9 @@ async function settingsAction(act, el) {
     if (sub) { await api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }); await sub.unsubscribe(); }
     toast('Push deaktiviert');
     viewSettings();
+  } else if (act === 'due-test') {
+    const now = Date.now();
+    showDue({ id: 'test', title: 'Subunternehmerplanung 2027', notes: 'So sieht das Pop-up aus, wenn eine Aufgabe fällig wird.', priority: 1, due_date: S.today, due_time: hmOf(now), duration_min: 30, project_id: (S.projects.find((x) => x.id !== 'inbox') || {}).id, reminders: [] }, null, { test: true });
   } else if (act === 'push-test') {
     const r = await api('/push/test', { method: 'POST' });
     toast(`Gesendet an ${r.sent} von ${r.devices} Gerät(en)`);
@@ -2226,6 +2235,142 @@ async function submitQuickAdd(e) {
     else toast(`„${t.title}“ hinzugefügt`, 'Öffnen', () => openTask(t.id));
   } catch (err) {
     toast(err.message);
+  }
+}
+
+// ---------------------------------------------------------------- due pop-up
+// When a task becomes due while the app is in use, a pop-up asks what to do with it.
+// Only for moments that pass while the app is actually open: coming back from the
+// background never replays what was missed (the push covered that).
+const DUE_WINDOW = 10 * 60000;          // never show anything older than 10 min
+let activeSince = Date.now();           // when the app last became visible
+let dueOpen = null;                     // {t, key, test}
+let dueSeen = store.get('dueSeen', {}); // key -> shown at (per device)
+let dueSnooze = store.get('dueSnooze', {}); // task id -> ms
+const pad2 = (n) => String(n).padStart(2, '0');
+const localDT = (d, t) => new Date(`${d}T${t}:00`).getTime();
+const ymdOf = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const hmOf = (ms) => { const d = new Date(ms); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+
+function dueMoments(t) {
+  const out = [];
+  if (t.due_date && t.due_time) out.push(localDT(t.due_date, t.due_time));
+  for (const r of t.reminders || []) if (r.at) out.push(localDT(r.at.slice(0, 10), r.at.slice(11, 16)));
+  return out;
+}
+
+function checkDue() {
+  if (document.visibilityState !== 'visible' || dueOpen) return;
+  if (document.querySelector('.modal.open')) return; // quick add / dialog open – try again shortly
+  const now = Date.now();
+  const from = Math.max(activeSince, now - DUE_WINDOW);
+  let best = null;
+  for (const t of S.tasks) {
+    if (t.completed_at || t._pending) continue;
+    for (const m of dueMoments(t)) {
+      const key = t.id + '@' + m;
+      if (m >= from && m <= now && !dueSeen[key] && (!best || m < best.m)) best = { t, key, m };
+    }
+    const sn = dueSnooze[t.id];
+    if (sn && sn <= now) {
+      delete dueSnooze[t.id];
+      store.set('dueSnooze', dueSnooze);
+      if (sn >= from && (!best || sn < best.m)) best = { t, key: t.id + '@snooze' + sn, m: sn };
+    }
+  }
+  if (best) showDue(best.t, best.key);
+}
+
+function markDueSeen(key) {
+  if (!key) return;
+  const cutoff = Date.now() - 3 * 86400000;
+  for (const [k, v] of Object.entries(dueSeen)) if (v < cutoff) delete dueSeen[k];
+  dueSeen[key] = Date.now();
+  store.set('dueSeen', dueSeen);
+}
+
+function showDue(t, key, { test = false } = {}) {
+  dueOpen = { t, key, test };
+  markDueSeen(key);
+  const p = project(t.project_id);
+  const now = Date.now();
+  const meta = [
+    t.due_time ? `${relDate(t.due_date, S.today)} · ${t.due_time} Uhr` : '',
+    p && p.id !== 'inbox' ? `<span class="proj-dot" style="background:${esc(p.color)}"></span>${esc(projectPath(p.id))}` : '',
+    t.priority < 4 ? `<span class="due-prio p${t.priority}">P${t.priority}</span>` : '',
+    t.duration_min ? fmtDuration(t.duration_min) : '',
+  ].filter(Boolean).join('<span class="sep">·</span>');
+  const evening = new Date().getHours() < 18;
+  const wrap = document.createElement('div');
+  wrap.className = 'modal open due-modal';
+  wrap.setAttribute('role', 'alertdialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.innerHTML = `<div class="due-card prio-${t.priority}">
+    <div class="due-kicker">🔔 To-Do fällig${test ? ' · Test' : ''}</div>
+    <h2 class="due-title">${esc(t.title)}</h2>
+    ${meta ? `<div class="due-meta">${meta}</div>` : ''}
+    ${t.notes ? `<p class="due-notes">${esc(t.notes.split('\n')[0].slice(0, 160))}</p>` : ''}
+    <div class="due-main">
+      <button class="btn primary" data-due="done">${icon('check')}Erledigt</button>
+      <button class="btn" data-due="focus">${icon('timer')}Fokus starten</button>
+    </div>
+    <div class="due-label">Später erinnern</div>
+    <div class="due-later">
+      <button class="btn" data-due="snooze">10 Min.</button>
+      <button class="btn" data-due="hour">+1 Std.</button>
+      ${evening ? '<button class="btn" data-due="evening">Heute 19:00</button>' : ''}
+      <button class="btn" data-due="tomorrow">Morgen</button>
+    </div>
+    <button class="due-open" data-due="open">Aufgabe öffnen</button>
+  </div>`;
+  document.body.appendChild(wrap);
+  // blocking: no backdrop click, no Escape – something has to be chosen
+  wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape') e.preventDefault(); });
+  wrap.addEventListener('click', (e) => { const b = e.target.closest('[data-due]'); if (b) dueAction(b.dataset.due); });
+  setTimeout(() => wrap.querySelector('[data-due="done"]')?.focus(), 30);
+}
+
+function closeDue() {
+  document.querySelector('.due-modal')?.remove();
+  dueOpen = null;
+  setTimeout(checkDue, 400); // next one, if several became due at once
+}
+
+async function dueAction(act) {
+  const { t, test } = dueOpen || {};
+  if (!t) return closeDue();
+  if (test) {
+    closeDue();
+    return toast(`Test: „${{ done: 'Erledigt', focus: 'Fokus starten', snooze: '10 Min.', hour: '+1 Std.', evening: 'Heute 19:00', tomorrow: 'Morgen', open: 'Aufgabe öffnen' }[act]}“ gewählt`);
+  }
+  closeDue();
+  const now = Date.now();
+  try {
+    if (act === 'done') return await complete(t.id);
+    if (act === 'focus') return await startFocusFor(t);
+    if (act === 'open') return openTask(t.id);
+    if (act === 'snooze') {
+      dueSnooze[t.id] = now + 10 * 60000;
+      store.set('dueSnooze', dueSnooze);
+      return toast('Erinnert in 10 Min.');
+    }
+    let patch;
+    if (act === 'hour') { const at = Math.ceil((now + 60 * 60000) / 300000) * 300000; patch = { due_date: ymdOf(at), due_time: hmOf(at) }; }
+    if (act === 'evening') patch = { due_date: S.today, due_time: '19:00' };
+    if (act === 'tomorrow') patch = { due_date: addDays(S.today, 1), due_time: t.due_time || '09:00' };
+    if (patch) {
+      await saveTask(t.id, patch);
+      toast(`Verschoben auf ${relDate(patch.due_date, S.today)}, ${patch.due_time} Uhr`);
+    }
+  } catch { /* saveTask/complete already show the error */ }
+}
+
+// a task handled on another device closes its pop-up here as well
+function revalidateDue() {
+  if (!dueOpen || dueOpen.test) return;
+  const cur = byId(dueOpen.t.id);
+  if (!cur || cur.completed_at || (cur.due_date !== dueOpen.t.due_date || cur.due_time !== dueOpen.t.due_time)) {
+    if (!dueOpen.key.includes('@snooze')) { document.querySelector('.due-modal')?.remove(); dueOpen = null; }
   }
 }
 

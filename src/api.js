@@ -175,7 +175,7 @@ export async function handleApi(request, env) {
       return json(results);
     }
     if (path === '/push/test' && method === 'POST') {
-      return json(await pushAll(env, { title: 'Test-Benachrichtigung', body: 'Push funktioniert ✅', tag: 'test', url: '/' }));
+      return json(await pushAll(env, { title: '🔔 To-Do: Test-Benachrichtigung', body: 'Heute · Push funktioniert ✅', tag: 'test', url: '/' }));
     }
     return json({ error: 'not found' }, 404);
   } catch (e) {

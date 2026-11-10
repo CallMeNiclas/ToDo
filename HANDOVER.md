@@ -53,6 +53,8 @@ Apple Health (Schritte/Ziel, Schlaf, weitere Werte), Spracheingabe, anpassbare M
 - Kein `backdrop-filter` auf vielen Kacheln (Scroll-Ruckeln), Aufgabenzeilen haben `content-visibility: auto`
 - Drawer wird nicht neu gezeichnet, solange ein Datum/Uhrzeit-Feld fokussiert ist (sonst schließt der iOS-Picker)
 - Refresh verwirft Ergebnisse, die sich mit laufenden Änderungen überschneiden (`mut` in app.js)
+- Auto-Refresh: 30 s in der Arbeitszeit (Einstellungen), sonst 60 s, plus beim Fenster-Fokus; Zeitstrahl tickt separat (`tickNow`)
+- Fälligkeits-Pop-up (`checkDue`): nur für Zeitpunkte, die vergehen, während die App sichtbar ist (`activeSince`), max. 10 Min. alt, pro Gerät gemerkt (`dueSeen`)
 
 ## Arbeitsweise
 - Lokal testen: `npx wrangler dev` mit `.dev.vars` (`DEV_LOGIN=1`), Login über `/auth/dev`; Screenshots mit Playwright (Skripte in `scripts/`)

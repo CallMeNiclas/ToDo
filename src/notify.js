@@ -62,12 +62,32 @@ function mailHtml(task, origin, reason, preview) {
 </div>`;
 }
 
+/** "Heute 14:00" / "Morgen" / "12.11. 09:00" */
+function whenText(task, tz) {
+  if (!task.due_date) return '';
+  const today = localNow(tz).date;
+  const [, m, d] = task.due_date.split('-');
+  const day = task.due_date === today ? 'Heute' : task.due_date === addDays(today, 1) ? 'Morgen' : `${+d}.${+m}.`;
+  return day + (task.due_time ? ' ' + task.due_time + ' Uhr' : '');
+}
+
 async function notifyTask(env, task, { email, reason }) {
   const origin = await getSetting(env, 'origin');
   const isDeadline = reason.includes('Deadline');
-  const body = [isDeadline ? reason : '', dueText(task), task.notes ? task.notes.slice(0, 120) : ''].filter(Boolean).join(' · ');
+  const proj = task.project_id && task.project_id !== 'inbox'
+    ? (await env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(task.project_id).first())?.name
+    : null;
+  // title: what it is at a glance; body: when · where · how important, then the notes
+  const title = isDeadline ? `🎯 Deadline: ${task.title}` : `🔔 To-Do: ${task.title}`;
+  const facts = [
+    reason.startsWith('Angekommen') || reason.startsWith('Verlassen') ? reason : '',
+    isDeadline ? 'Deadline heute' : whenText(task, env.TIMEZONE),
+    proj,
+    task.priority < 4 ? (task.priority === 1 ? '🔴 Prio 1' : 'Prio ' + task.priority) : '',
+  ].filter(Boolean).join(' · ');
+  const body = [facts, task.notes ? task.notes.split('\n')[0].slice(0, 100) : ''].filter(Boolean).join('\n');
   const push = await pushAll(env, {
-    title: (isDeadline ? '🎯 ' : task.priority === 1 ? '🔴 ' : '') + task.title,
+    title,
     body: body || reason,
     tag: 'task-' + task.id,
     url: '/#/task/' + task.id,

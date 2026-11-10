@@ -892,3 +892,37 @@ body[data-bg="photo"][data-view="today"] :is(.stat, .panel) { background: color-
 button.nav-item { border: 0; background: transparent; font: inherit; width: 100%; text-align: left; }
 #refresh-btn.spin svg { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- due pop-up ---------- */
+.due-modal { align-items: center; padding: 16px; background: rgba(8, 10, 16, .55); z-index: 60; }
+.due-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow-lg);
+  width: min(620px, 50vw); min-width: min(440px, 100%); min-height: min(46vh, 520px); padding: 28px 30px 22px;
+  display: flex; flex-direction: column; gap: 10px; animation: pop .18s ease-out;
+  border-top: 6px solid var(--pc, var(--accent));
+}
+.due-card.prio-1 { --pc: var(--p1); } .due-card.prio-2 { --pc: var(--p2); } .due-card.prio-3 { --pc: var(--p3); }
+.due-kicker { font-size: 14px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--pc, var(--accent)); }
+.due-title { margin: 0; font-size: 30px; line-height: 1.2; font-weight: 800; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.due-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--fg-2); font-size: 15px; font-weight: 600; }
+.due-meta .sep { color: var(--muted); }
+.due-meta .proj-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 2px; }
+.due-prio { padding: 1px 8px; border-radius: 999px; font-size: 13px; background: color-mix(in srgb, var(--pc) 16%, transparent); color: var(--pc); }
+.due-prio.p1 { --pc: var(--p1); } .due-prio.p2 { --pc: var(--p2); } .due-prio.p3 { --pc: var(--p3); }
+.due-notes { margin: 0; color: var(--muted); font-size: 14.5px; }
+.due-main { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: auto; padding-top: 12px; }
+.due-main .btn { justify-content: center; font-size: 16px; font-weight: 700; padding: 14px 12px; gap: 8px; }
+.due-main .btn svg { width: 18px; height: 18px; }
+.due-label { font-size: 12.5px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+.due-later { display: flex; flex-wrap: wrap; gap: 8px; }
+.due-later .btn { flex: 1 1 0; justify-content: center; font-weight: 600; white-space: nowrap; }
+.due-open { align-self: center; border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; padding: 6px; }
+@media (max-width: 860px) {
+  .due-card { width: 100%; min-width: 0; min-height: 0; padding: 20px 18px 12px; gap: 8px; }
+  .due-title { font-size: 24px; }
+  .due-meta, .due-notes { font-size: 14px; }
+  .due-main { padding-top: 8px; gap: 8px; }
+  .due-main .btn { padding: 12px 8px; font-size: 16px; min-height: 0; }
+  .due-later { flex-wrap: nowrap; gap: 6px; }
+  .due-later .btn { padding: 9px 4px; font-size: 14px; min-height: 0; }
+}
