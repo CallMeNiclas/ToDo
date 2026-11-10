@@ -92,6 +92,8 @@ async function apiRaw(path, { method = 'GET', body } = {}) {
         headers: body ? { 'Content-Type': 'application/json' } : {},
         body: body ? JSON.stringify(body) : undefined,
         credentials: 'same-origin',
+        // a hanging request must not block all further refreshes
+        signal: AbortSignal.timeout?.(method === 'GET' ? 15000 : 30000),
       });
     } catch {
       res = null;
@@ -183,9 +185,13 @@ function start() {
   route();
   renderSync();
   if (queue.length && net.online) sync();
-  setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, net.online ? 60000 : 60000);
+  scheduleAutoRefresh();
   setInterval(() => { if (!net.online && document.visibilityState === 'visible') refresh(); }, 15000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { refresh(); tickNow(); } });
+  // desktop app window: clicking back into it does not change visibility – refresh on focus too
+  let lastFocusRefresh = 0;
+  window.addEventListener('focus', () => { if (Date.now() - lastFocusRefresh > 5000) { lastFocusRefresh = Date.now(); refresh(); tickNow(); } });
+  setInterval(tickNow, 30000);
   window.addEventListener('online', () => refresh());
   window.addEventListener('offline', () => setOnline(false));
 }
@@ -219,6 +225,38 @@ function setupUpdates() {
     // otherwise as soon as the user is done (drawer closed, nothing typed)
     const timer = setInterval(() => { if (appIdle()) { clearInterval(timer); location.reload(); } }, 3000);
   });
+}
+
+// auto refresh: every 30 s during working hours (work schedule from the settings), otherwise every 60 s
+function inWorkHours(d = new Date()) {
+  const st = S.settings || {};
+  const days = String(st.work_days || '1,2,3,4,5').split(',').map(Number);
+  const wd = d.getDay() || 7;
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return days.includes(wd) && hm >= (st.work_start || '08:15') && hm < (st.work_end || '18:15');
+}
+function scheduleAutoRefresh() {
+  setTimeout(() => {
+    if (document.visibilityState === 'visible') refresh();
+    scheduleAutoRefresh();
+  }, inWorkHours() ? 30000 : 60000);
+}
+
+// the red "now" line in the day plan moves on its own – data refreshes no longer redraw unchanged views
+function tickNow() {
+  const now = new Date();
+  const min = now.getHours() * 60 + now.getMinutes();
+  const today = localDateOf(now.toISOString());
+  for (const tl of $$('.timeline[data-date]')) {
+    if (tl.dataset.date !== today) continue;
+    const startH = +tl.dataset.start, px = +tl.dataset.px, endH = +tl.dataset.end;
+    if (min < startH * 60 || min > endH * 60) continue;
+    let line = tl.querySelector('.now-line');
+    if (!line) { line = document.createElement('div'); line.className = 'now-line'; tl.appendChild(line); }
+    line.style.top = ((min - startH * 60) / 60) * px + 'px';
+    for (const b of tl.querySelectorAll('.block[data-end]')) b.classList.toggle('past', +b.dataset.end <= min);
+  }
+  if (S.today && today !== S.today) refresh(); // midnight passed
 }
 
 let refreshing = null;
@@ -794,14 +832,14 @@ async function renderTimeline(date, dayTasks) {
     layoutColumns(items);
     let html = '';
     if (allDay.length) html += `<div class="allday">${allDay.map((e) => `<span class="chip"><span class="dot" style="background:${esc(e.color)}"></span><span>${esc(e.title)}</span></span>`).join('')}</div>`;
-    html += `<div class="timeline" style="height:${(endH - startH) * PX}px">`;
+    html += `<div class="timeline" data-date="${date}" data-start="${startH}" data-end="${endH}" data-px="${PX}" style="height:${(endH - startH) * PX}px">`;
     for (let h = startH; h <= endH; h++) html += `<div class="hour" style="top:${(h - startH) * PX}px"><span>${String(h).padStart(2, '0')}:00</span></div>`;
     for (const it of items) {
       const top = y(it.s), height = Math.max(20, y(it.e) - top - 2);
       const w = 100 / it.cols;
       const color = it.kind === 'task' ? (it.prio === 4 ? 'var(--accent)' : `var(--p${it.prio})`) : esc(it.color);
       const past = nowMin !== null && it.e <= nowMin ? ' past' : '';
-      html += `<div class="block${it.kind === 'task' ? ' task-block' : ''}${past}" style="--c:${color};top:${top}px;height:${height}px;left:calc(${it.col * w}% + 2px);width:calc(${w}% - 4px)" ${it.id ? `data-task="${it.id}"` : `data-url="${esc(it.url || '')}"`}><b>${it.kind === 'task' ? '☐ ' : ''}${esc(it.title)}</b>${height > 34 ? `<small>${esc(it.sub)}</small>` : ''}</div>`;
+      html += `<div class="block${it.kind === 'task' ? ' task-block' : ''}${past}" data-end="${it.e}" style="--c:${color};top:${top}px;height:${height}px;left:calc(${it.col * w}% + 2px);width:calc(${w}% - 4px)" ${it.id ? `data-task="${it.id}"` : `data-url="${esc(it.url || '')}"`}><b>${it.kind === 'task' ? '☐ ' : ''}${esc(it.title)}</b>${height > 34 ? `<small>${esc(it.sub)}</small>` : ''}</div>`;
     }
     if (nowMin !== null) html += `<div class="now-line" style="top:${y(nowMin)}px"></div>`;
     html += '</div>';
