@@ -54,13 +54,13 @@ const P = {
 };
 // ---------------------------------------------------------------- view symbols (filled, colored)
 const VI = {
-  dashboard: ['#5B7FD6', '<rect x="3" y="3" width="8" height="8" rx="2.2"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2.2"/>'],
-  today: ['#F7A928', '<circle cx="12" cy="12" r="5"/><g stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4M4.8 4.8l1.7 1.7M17.5 17.5l1.7 1.7M4.8 19.2l1.7-1.7M17.5 6.5l1.7-1.7"/></g>'],
-  week: ['#E5484D', '<rect x="3" y="4.5" width="18" height="16.5" rx="3.5"/><rect x="3" y="4.5" width="18" height="5" rx="2" fill="#fff" opacity=".28"/><g fill="#fff"><circle cx="8" cy="13.5" r="1.2"/><circle cx="12" cy="13.5" r="1.2"/><circle cx="16" cy="13.5" r="1.2"/><circle cx="8" cy="17.3" r="1.2"/><circle cx="12" cy="17.3" r="1.2"/></g><rect x="7" y="2.5" width="2" height="4" rx="1"/><rect x="15" y="2.5" width="2" height="4" rx="1"/>'],
+  dashboard: ['#0A84FF', '<rect x="3" y="3" width="8" height="8" rx="2.2"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity=".7"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity=".7"/><rect x="13" y="13" width="8" height="8" rx="2.2"/>'],
+  today: ['#FF9F0A', '<circle cx="12" cy="12" r="5"/><g stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4M4.8 4.8l1.7 1.7M17.5 17.5l1.7 1.7M4.8 19.2l1.7-1.7M17.5 6.5l1.7-1.7"/></g>'],
+  week: ['#FF3B30', '<rect x="3" y="4.5" width="18" height="16.5" rx="3.5"/><rect x="3" y="4.5" width="18" height="5" rx="2" fill="#fff" opacity=".28"/><g fill="#fff"><circle cx="8" cy="13.5" r="1.2"/><circle cx="12" cy="13.5" r="1.2"/><circle cx="16" cy="13.5" r="1.2"/><circle cx="8" cy="17.3" r="1.2"/><circle cx="12" cy="17.3" r="1.2"/></g><rect x="7" y="2.5" width="2" height="4" rx="1"/><rect x="15" y="2.5" width="2" height="4" rx="1"/>'],
   upcoming: ['#2FA39A', '<path d="M12 3 2.8 7.7 12 12.4l9.2-4.7z"/><path d="M4.6 11.2 2.8 12.1 12 16.8l9.2-4.7-1.8-.9L12 15z" opacity=".75"/><path d="M4.6 15.6 2.8 16.5 12 21.2l9.2-4.7-1.8-.9L12 19.4z" opacity=".5"/>'],
-  inbox: ['#3D8BF2', '<rect x="3" y="3.5" width="18" height="17" rx="4"/><path d="M3 13.5h5.2l1.3 2.3h5l1.3-2.3H21V17a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 17z" fill="#fff" opacity=".9"/>'],
-  completed: ['#45B26B', '<rect x="4" y="2.5" width="15" height="19" rx="3"/><rect x="4" y="2.5" width="3.2" height="19" rx="1.5" fill="#000" opacity=".12"/><path d="M8.8 12.3l2.4 2.4 4.6-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
-  focus: ['#8B5CF6', '<circle cx="12" cy="13.2" r="8.6"/><rect x="9.5" y="1.6" width="5" height="2.6" rx="1.3"/><path d="M12 8.6v4.8l3 1.8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+  inbox: ['#0A84FF', '<rect x="3" y="3.5" width="18" height="17" rx="4"/><path d="M3 13.5h5.2l1.3 2.3h5l1.3-2.3H21V17a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 17z" fill="#fff" opacity=".9"/>'],
+  completed: ['#34C759', '<rect x="4" y="2.5" width="15" height="19" rx="3"/><rect x="4" y="2.5" width="3.2" height="19" rx="1.5" fill="#000" opacity=".12"/><path d="M8.8 12.3l2.4 2.4 4.6-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+  focus: ['#AF52DE', '<circle cx="12" cy="13.2" r="8.6"/><rect x="9.5" y="1.6" width="5" height="2.6" rx="1.3"/><path d="M12 8.6v4.8l3 1.8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
   search: ['#8E8E93', '<circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>'],
   settings: ['#8E8E93', '<path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="15" cy="7" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="17" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/>'],
   label: ['#8E8E93', '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1.6" fill="#fff"/>'],
@@ -595,7 +595,8 @@ function parseRoute() {
   const [name, ...rest] = h.split('/');
   const arg = rest.join('/');
   if (name === 'task' && arg) return { name: 'task', id: arg };
-  if (['dashboard', 'today', 'week', 'upcoming', 'inbox', 'completed', 'settings', 'focus'].includes(name)) return { name, arg };
+  if (name === 'upcoming') return { name: 'week' }; // old view, merged into "Demnächst"
+  if (['dashboard', 'today', 'week', 'inbox', 'completed', 'settings', 'focus'].includes(name)) return { name, arg };
   if (name === 'project' && arg) return { name, arg };
   if (name === 'label' && arg) return { name, arg };
   if (name === 'search') return { name, arg: arg || '' };
@@ -630,7 +631,7 @@ function render() {
   const r = S.route;
   $('#top-actions').innerHTML = '';
   $('#view-sub').textContent = '';
-  const views = { dashboard: viewDashboard, today: viewToday, week: viewWeek, upcoming: viewUpcoming, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings, focus: viewFocus };
+  const views = { dashboard: viewDashboard, today: viewToday, week: viewWeek, inbox: () => viewProject('inbox'), project: () => viewProject(r.arg), label: () => viewLabel(r.arg), search: () => viewSearch(r.arg), completed: viewCompleted, settings: viewSettings, focus: viewFocus };
   document.body.dataset.view = r.name;
   $('#mode-pill').hidden = !['dashboard', 'today'].includes(r.name);
   (views[r.name] || viewDashboard)();
@@ -653,8 +654,7 @@ function renderNav() {
     '<div class="nav-gap"></div>' +
     item('#/dashboard', viewIcon('dashboard'), 'Übersicht', '', active('dashboard')) +
     item('#/today', viewIcon('today'), 'Heute', c.today + c.overdue || '', active('today')).replace('class="count"', c.overdue ? 'class="count alert"' : 'class="count"') +
-    item('#/week', viewIcon('week'), 'Diese Woche', c.week || '', active('week')) +
-    item('#/upcoming', viewIcon('upcoming'), 'Demnächst', '', active('upcoming')) +
+    item('#/week', viewIcon('week'), 'Demnächst', c.week || '', active('week')) +
     item('#/focus', viewIcon('focus'), 'Fokus', '', active('focus'));
 
   const perProject = new Map();
@@ -687,16 +687,17 @@ function renderNav() {
 const TAB_OPTIONS = {
   dashboard: { label: 'Übersicht', icon: 'grid' },
   today: { label: 'Heute', icon: 'sun' },
-  week: { label: 'Woche', icon: 'week' },
-  upcoming: { label: 'Demnächst', icon: 'upcoming' },
+  week: { label: 'Demnächst', icon: 'week' },
   inbox: { label: 'Eingang', icon: 'inbox' },
   search: { label: 'Suche', icon: 'search' },
   completed: { label: 'Erledigt', icon: 'done' },
   focus: { label: 'Fokus', icon: 'timer' },
 };
-const TAB_DEFAULT = ['dashboard', 'today', 'week', 'upcoming'];
+const TAB_DEFAULT = ['dashboard', 'today', 'week', 'focus'];
 function tabConfig() {
-  const t = store.get('tabs', TAB_DEFAULT).filter((k) => k in TAB_OPTIONS);
+  const saved = store.get('tabs', TAB_DEFAULT);
+  // removed views: fill the free place with "Fokus"
+  const t = saved.map((k) => (k === 'upcoming' && !saved.includes('focus') ? 'focus' : k)).filter((k) => k in TAB_OPTIONS);
   return t.length ? t.slice(0, 4) : TAB_DEFAULT;
 }
 function renderTabSettings() {
@@ -727,8 +728,8 @@ function statsHtml() {
   const R = 17, L = 2 * Math.PI * R;
   return `<div class="stats">
     <a class="stat c1" href="#/today"><div class="ico">${icon('sun')}</div><div style="min-width:0"><div class="num">${c.today + c.overdue}</div><div class="lbl">Heute offen</div>${c.overdue ? `<div class="lbl alert">${c.overdue} überfällig</div>` : ''}</div></a>
-    <a class="stat c2" href="#/week"><div class="ico">${icon('week')}</div><div style="min-width:0"><div class="num">${c.week}</div><div class="lbl">Diese Woche</div></div></a>
-    <a class="stat c3" href="#/upcoming"><div class="ico">${icon('layers')}</div><div style="min-width:0"><div class="num">${c.total}</div><div class="lbl">Insgesamt offen</div></div></a>
+    <a class="stat c2" href="#/week"><div class="ico">${icon('week')}</div><div style="min-width:0"><div class="num">${c.week}</div><div class="lbl">Demnächst (Woche)</div></div></a>
+    <a class="stat c3" href="#/week"><div class="ico">${icon('layers')}</div><div style="min-width:0"><div class="num">${c.total}</div><div class="lbl">Insgesamt offen</div></div></a>
     <div class="stat"><svg class="ring" viewBox="0 0 42 42"><circle class="bg" cx="21" cy="21" r="${R}"/><circle class="fg" cx="21" cy="21" r="${R}" stroke-dasharray="${L}" stroke-dashoffset="${L * (1 - pct / 100)}"/></svg><div style="min-width:0"><div class="num">${S.doneToday}</div><div class="lbl">Heute erledigt</div>${totalToday ? `<div class="lbl">${pct}% geschafft</div>` : ''}</div></div>
   </div>`;
 }
@@ -899,7 +900,12 @@ function layoutColumns(items) {
   if (cluster.length) flush();
 }
 
+const SPANS = [[1, '1 Tag'], [3, '3 Tage'], [7, '7 Tage'], ['m', 'Monat']];
+function spanSwitch(cur) {
+  return `<div class="span-switch" role="tablist">${SPANS.map(([n, l]) => `<button class="${n === cur ? 'on' : ''}" data-span="${n}">${l}</button>`).join('')}</div>`;
+}
 function viewWeek() {
+  if (store.get('weekSpan', 7) === 'm') return viewMonth();
   const span = [1, 3, 7].includes(+store.get('weekSpan', 7)) ? +store.get('weekSpan', 7) : 7;
   const argDate = S.route.arg && /^\d{4}-\d{2}-\d{2}$/.test(S.route.arg) ? S.route.arg : null;
   const start = span === 7 ? mondayOf(argDate || S.today) : argDate || S.today;
@@ -910,14 +916,14 @@ function viewWeek() {
   const tasksIn = scoped().filter((t) => t.due_date >= start && t.due_date <= end);
   const mins = tasksIn.reduce((n, t) => n + (t.duration_min || 0), 0);
   const range = span === 1 ? fmtLongDate(start) : `${d1}. ${MONTHS[m1 - 1].slice(0, 3)} – ${d2}. ${MONTHS[m2 - 1].slice(0, 3)}`;
-  const title = span === 7 ? (containsToday ? 'Diese Woche' : `KW ${isoWeekNo(start)}`) : span === 3 ? '3 Tage' : relDate(start, S.today);
-  setTitle(title, `${range} · ${tasksIn.length} Aufg.${mins ? ' · ' + fmtShort(mins) : ''}`);
+  const label = span === 7 ? (containsToday ? 'Diese Woche' : `KW ${isoWeekNo(start)}`) : span === 3 ? '3 Tage' : relDate(start, S.today);
+  setTitle('Demnächst', `${label} · ${range} · ${tasksIn.length} Aufg.${mins ? ' · ' + fmtShort(mins) : ''}`);
   const back = addDays(start, -span), fwd = addDays(start, span);
   $('#top-actions').innerHTML = `<div class="week-nav"><a class="icon-btn" href="#/week/${back}" aria-label="Zurück">${icon('left')}</a>${containsToday ? '' : '<a class="btn sm" href="#/week">Heute</a>'}<a class="icon-btn" href="#/week/${fwd}" aria-label="Weiter">${icon('right')}</a></div>`;
   const timeline = span < 7 || window.innerWidth >= 1000;
   const draw = (data) => {
     const evs = data?.events || [];
-    let html = `<div class="span-switch" role="tablist">${[1, 3, 7].map((n) => `<button class="${n === span ? 'on' : ''}" data-span="${n}">${n === 1 ? '1 Tag' : n + ' Tage'}</button>`).join('')}</div>`;
+    let html = spanSwitch(span);
     if (timeline) {
       $('#content').innerHTML = html + weekTimelineHtml(start, span, evs, containsToday) + (data && !data.connected ? `<div class="cal-note">Termine fehlen: Google Kalender ist nicht verbunden.</div>` : '');
       tickNow();
@@ -1071,7 +1077,7 @@ function tlMove(x, y) {
     tl.drop = { date: col.dataset.date, time: hm };
   } else if (cell) {
     cell.classList.add('drop');
-    tl.drop = { date: cell.dataset.dropDay, time: null };
+    tl.drop = { date: cell.dataset.dropDay, time: cell.dataset.keepTime ? (t?.due_time || null) : null };
   }
   // auto-scroll near the edges
   const edge = 70;
@@ -1098,7 +1104,7 @@ async function tlEnd(cancel) {
   } catch { /* saveTask shows the error */ }
 }
 function bindTimelineDrag() {
-  const pick = (e) => (e.target.closest('.tl-week [data-drag-task]') && !e.target.closest('button') ? e.target.closest('[data-drag-task]') : null);
+  const pick = (e) => (e.target.closest('.tl-week [data-drag-task], .mo [data-drag-task]') && !e.target.closest('button') ? e.target.closest('[data-drag-task]') : null);
   document.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const el = pick(e);
@@ -1134,6 +1140,51 @@ function bindTimelineDrag() {
   document.addEventListener('contextmenu', (e) => { if (tl.active || tl.timer) e.preventDefault(); });
 }
 
+// ---------------------------------------------------------------- month
+function viewMonth() {
+  const arg = S.route.arg && /^\d{4}-\d{2}-\d{2}$/.test(S.route.arg) ? S.route.arg : S.today;
+  const first = arg.slice(0, 8) + '01';
+  const [y, m] = first.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const gridStart = mondayOf(first);
+  const gridEnd = addDays(mondayOf(last), 6);
+  const weeks = Math.round((Date.parse(gridEnd) - Date.parse(gridStart)) / 86400000 + 1) / 7;
+  const inMonth = scoped().filter((t) => t.due_date >= first && t.due_date <= last);
+  setTitle('Demnächst', `${MONTHS[m - 1]} ${y} · ${inMonth.length} Aufg.`);
+  const prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
+  const next = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const isCur = S.today >= first && S.today <= last;
+  $('#top-actions').innerHTML = `<div class="week-nav"><a class="icon-btn" href="#/week/${prev}" aria-label="Voriger Monat">${icon('left')}</a>${isCur ? '' : '<a class="btn sm" href="#/week">Heute</a>'}<a class="icon-btn" href="#/week/${next}" aria-label="Nächster Monat">${icon('right')}</a></div>`;
+  const draw = (data) => {
+    const evs = data?.events || [];
+    let html = spanSwitch('m') + `<div class="mo"><div class="mo-wd">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<span>${WD_SHORT[d]}</span>`).join('')}</div><div class="mo-grid" style="--weeks:${weeks}">`;
+    for (let d = gridStart; d <= gridEnd; d = addDays(d, 1)) {
+      const out = d < first || d > last;
+      let ts = scoped().filter((t) => t.due_date === d);
+      if (d === S.today) ts = [...scoped().filter((t) => t.due_date && t.due_date < S.today && !t.parent_id), ...ts];
+      ts = sortTasks(ts);
+      const ev = eventsOn(evs, d);
+      const items = [
+        ...ev.map((e) => `<div class="mo-ev" style="--c:${esc(e.color)}" data-url="${esc(e.url || '')}">${e.allDay ? '' : `<i>${timeOf(e.start)}</i>`}${esc(e.title)}</div>`),
+        ...ts.map((t) => `<div class="tl-chip mo-task prio-${t.priority}" data-task="${t.id}" data-drag-task="${t.id}"><button class="check" data-check="${t.id}" aria-label="Erledigen"></button><span>${t.due_time ? `<i>${t.due_time}</i>` : ''}${esc(t.title)}</span></div>`),
+      ];
+      const max = 4;
+      const dots = [...ev.slice(0, 3).map((e) => `<i style="background:${esc(e.color)}"></i>`), ...ts.slice(0, 4).map((t) => `<i class="t prio-${t.priority}"></i>`)].join('');
+      html += `<div class="mo-day tl-cell${out ? ' out' : ''}${d === S.today ? ' is-today' : ''}${d < S.today ? ' past' : ''}" data-drop-day="${d}" data-keep-time="1">
+        <button class="mo-num" data-open-day="${d}">${+d.slice(8, 10)}</button>
+        <div class="mo-items">${items.slice(0, max).join('')}${items.length > max ? `<button class="mo-more" data-open-day="${d}">+ ${items.length - max} weitere</button>` : ''}</div>
+        <button class="mo-dots" data-open-day="${d}">${dots}${items.length ? `<b>${items.length}</b>` : ''}</button>
+      </div>`;
+    }
+    html += '</div></div>';
+    if (data && !data.connected) html += `<div class="cal-note">Termine fehlen: Google Kalender ist nicht verbunden.</div>`;
+    $('#content').innerHTML = html;
+  };
+  draw(cachedEvents(gridStart, addDays(gridEnd, 1)));
+  const routeAtStart = location.hash;
+  events(gridStart, addDays(gridEnd, 1)).then((d) => { if (location.hash === routeAtStart && S.route.name === 'week' && store.get('weekSpan', 7) === 'm') draw(d); });
+}
+
 function isoWeekNo(d) {
   const [y, m, day] = d.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, day));
@@ -1161,35 +1212,6 @@ function bindWeekDnD() {
       }
     });
   });
-}
-
-function viewUpcoming() {
-  setTitle('Demnächst', 'Ab morgen');
-  const start = addDays(S.today, 1);
-  const days = 14;
-  const future = sortTasks(scoped().filter((t) => t.due_date && t.due_date >= start));
-  const dates = new Set();
-  for (let i = 0; i < days; i++) dates.add(addDays(start, i));
-  for (const t of future) dates.add(t.due_date);
-  const sorted = [...dates].sort();
-  const draw = (data) => {
-    const evs = data?.events || [];
-    let html = '';
-    for (const d of sorted) {
-      const ts = future.filter((t) => t.due_date === d);
-      const ev = eventsOn(evs, d);
-      const mins = ts.reduce((n, t) => n + (t.duration_min || 0), 0);
-      const rel = relDate(d, S.today);
-      const long = fmtLongDate(d);
-      html += `<div class="panel day-group"><div class="panel-head"><h2>${esc(rel === long.split(',')[0] ? long : rel)} ${rel !== long && rel !== long.split(',')[0] ? `<span class="rel">${esc(long)}</span>` : ''}</h2><span class="meta">${[ts.length ? ts.length + ' Aufg.' : '', mins ? fmtMins(mins) : ''].filter(Boolean).join(' · ')}</span></div>
-        ${ev.length ? `<div class="ev-line">${ev.map((e) => `<span class="chip" data-url="${esc(e.url || '')}"><span class="dot" style="background:${esc(e.color)}"></span><span>${e.allDay ? '' : timeOf(e.start) + ' '}${esc(e.title)}</span></span>`).join('')}</div>` : ''}
-        <div class="section" style="padding-top:0">${ts.map((t) => taskRow(t, { showDate: false })).join('')}${addInline({ due_date: d })}</div></div>`;
-    }
-    $('#content').innerHTML = html;
-  };
-  const from = start, to = addDays(start, days);
-  draw(cachedEvents(from, to));
-  events(from, to).then((d) => { if (S.route.name === 'upcoming') draw(d); });
 }
 
 function sortManual(list) {
@@ -2738,7 +2760,9 @@ function bindGlobal() {
     if (el.closest('#refresh-btn')) return manualRefresh();
     if (el.closest('#mode-pill')) return openModeMenu();
     const sp = el.closest('[data-span]');
-    if (sp) { store.set('weekSpan', +sp.dataset.span); return go('#/week'); }
+    if (sp) { store.set('weekSpan', sp.dataset.span === 'm' ? 'm' : +sp.dataset.span); return go('#/week'); }
+    const od = el.closest('[data-open-day]');
+    if (od) { store.set('weekSpan', 1); return go('#/week/' + od.dataset.openDay); }
     if (el.closest('#focus-pill') || el.closest('[data-focus-panel]')) return openFocusPanel();
     const fs = el.closest('[data-focus-start]');
     if (fs) return startFocusFor(byId(fs.dataset.focusStart));
