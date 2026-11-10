@@ -55,6 +55,13 @@ export async function handleApi(request, env) {
     if (path === '/tasks' && method === 'GET') return json({ tasks: await T.listOpenTasks(env), today: localNow(env.TIMEZONE).date });
     if (path === '/tasks/completed' && method === 'GET') return json({ tasks: await T.listCompleted(env, Math.min(200, +url.searchParams.get('limit') || 50)) });
     if (path === '/tasks' && method === 'POST') return json(await T.createTask(env, body), 201);
+    if (path === '/tasks/reorder' && method === 'POST') {
+      // drag & drop: optional move into another project, then the list's new order
+      const ids = Array.isArray(body.ids) ? body.ids.filter((x) => typeof x === 'string').slice(0, 500) : [];
+      if (body.move?.id && body.move.project_id) await T.updateTask(env, body.move.id, { project_id: body.move.project_id });
+      if (ids.length) await env.DB.batch(ids.map((id, i) => env.DB.prepare('UPDATE tasks SET sort = ? WHERE id = ?').bind((i + 1) * 10, id)));
+      return json({ ok: true });
+    }
     if ((r = m(/^\/tasks\/([\w-]+)$/))) {
       if (method === 'GET') return json(await T.getTask(env, r[1]));
       if (method === 'PATCH') return json(await T.updateTask(env, r[1], body));

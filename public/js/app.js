@@ -200,6 +200,7 @@ function start() {
   for (const [k, v] of Object.entries(store.get('cal', {}))) S.cal.set(k, { at: 0, data: v });
   setupUpdates();
   bindGlobal();
+  bindDnd();
   route();
   renderSync();
   if (queue.length && net.online) sync();
@@ -1000,9 +1001,14 @@ function viewUpcoming() {
   events(from, to).then((d) => { if (S.route.name === 'upcoming') draw(d); });
 }
 
+function sortManual(list) {
+  const base = sortTasks(list);
+  const pos = new Map(base.map((t, i) => [t.id, i]));
+  return base.sort((a, b) => (a.sort || 0) - (b.sort || 0) || pos.get(a.id) - pos.get(b.id));
+}
 function nestedList(list, opts) {
   const ids = new Set(list.map((t) => t.id));
-  const roots = sortTasks(list.filter((t) => !t.parent_id || !ids.has(t.parent_id)));
+  const roots = (opts?.manual ? sortManual : sortTasks)(list.filter((t) => !t.parent_id || !ids.has(t.parent_id)));
   const out = [];
   const walk = (t, depth) => {
     out.push(taskRow(t, { ...opts, sub: depth > 0, showParent: false }));
@@ -1026,14 +1032,14 @@ function viewProject(id) {
   if (id !== 'inbox') {
     $('#top-actions').innerHTML = `${p.is_main ? `<button class="btn sm ghost" data-new-subproject="${id}">${icon('plus')}<span class="hide-narrow">Unterprojekt</span></button>` : ''}<button class="icon-btn" data-edit-project="${id}" aria-label="Projekt bearbeiten">${icon('more')}</button>`;
   }
-  let html = `<div class="panel"><div class="section">${own.length ? nestedList(own, { showProject: false }) : kids.length ? '' : emptyHtml(id === 'inbox' ? '📥' : '✨', id === 'inbox' ? 'Eingang ist leer.' : 'Keine offenen Aufgaben.')}${addInline({ project_id: id })}</div></div>`;
+  let html = `<div class="panel"><div class="section" data-drop-project="${id}">${own.length ? nestedList(own, { showProject: false, manual: true }) : kids.length ? '' : emptyHtml(id === 'inbox' ? '📥' : '✨', id === 'inbox' ? 'Eingang ist leer.' : 'Keine offenen Aufgaben.')}${addInline({ project_id: id })}</div></div>`;
   for (const k of kids) {
     const kidIds = subtree(k.id);
     const list = open().filter((t) => kidIds.has(t.project_id));
     const grandKids = childProjects(k.id).length;
     html += `<div class="panel subproject">
       <div class="panel-head"><a class="sub-head" href="#/project/${k.id}"><span class="dot" style="background:${esc(k.color)}"></span><h2>${esc(k.name)}</h2><span class="meta">${list.filter((t) => !t.parent_id).length || ''}${grandKids ? ` · ${grandKids} Unterprojekt${grandKids === 1 ? '' : 'e'}` : ''}</span>${icon('right')}</a></div>
-      <div class="section" style="padding-top:0">${list.length ? nestedList(list, { showProject: grandKids > 0 }) : '<div class="empty" style="padding:10px 16px">Keine offenen Aufgaben.</div>'}${addInline({ project_id: k.id })}</div></div>`;
+      <div class="section" data-drop-project="${k.id}" style="padding-top:0">${list.length ? nestedList(list, { showProject: grandKids > 0, manual: true }) : '<div class="empty" style="padding:10px 16px">Keine offenen Aufgaben.</div>'}${addInline({ project_id: k.id })}</div></div>`;
   }
   $('#content').innerHTML = html;
 }
@@ -2087,6 +2093,137 @@ async function submitQuickAdd(e) {
   } catch (err) {
     toast(err.message);
   }
+}
+
+// ---------------------------------------------------------------- drag & drop (project lists)
+// Mouse: press and move. Touch: hold ~0.35 s, then drag. Drop reorders the list or moves the
+// task into another project section (e.g. a sub-project).
+const dnd = { src: null, ghost: null, line: null, target: null, before: null, endAt: 0, sx: 0, sy: 0, timer: null, active: false, scrollRaf: 0, y: 0 };
+function dndRows(section) { return [...section.querySelectorAll(':scope > .task:not(.sub)')].filter((r) => r !== dnd.src); }
+function dndStart(row, x, y) {
+  dnd.active = true;
+  dnd.src = row;
+  const r = row.getBoundingClientRect();
+  const g = row.cloneNode(true);
+  g.classList.add('dnd-ghost');
+  g.style.width = r.width + 'px';
+  g.style.left = r.left + 'px';
+  g.dataset.dx = x - r.left; g.dataset.dy = y - r.top;
+  document.body.appendChild(g);
+  dnd.ghost = g;
+  dnd.line = document.createElement('div');
+  dnd.line.className = 'dnd-line';
+  row.classList.add('dnd-src');
+  // its subtasks travel with it
+  let n = row.nextElementSibling;
+  while (n && n.classList.contains('sub')) { n.classList.add('dnd-src'); n = n.nextElementSibling; }
+  document.body.classList.add('dnd-on');
+  navigator.vibrate?.(15);
+  dndMove(x, y);
+}
+function dndMove(x, y) {
+  if (!dnd.active) return;
+  dnd.y = y;
+  dnd.ghost.style.top = (y - +dnd.ghost.dataset.dy) + 'px';
+  dnd.ghost.style.left = (x - +dnd.ghost.dataset.dx) + 'px';
+  const el = document.elementFromPoint(x, y);
+  const sec = el?.closest('.section[data-drop-project]');
+  if (!sec) return;
+  const rows = dndRows(sec);
+  let before = rows.find((r) => { const b = r.getBoundingClientRect(); return y < b.top + b.height / 2; }) || null;
+  dnd.target = sec; dnd.before = before;
+  if (before) sec.insertBefore(dnd.line, before);
+  else { const add = sec.querySelector(':scope > .add-inline'); add ? sec.insertBefore(dnd.line, add) : sec.appendChild(dnd.line); }
+  // auto-scroll near the edges
+  cancelAnimationFrame(dnd.scrollRaf);
+  const edge = 70, vh = window.innerHeight;
+  const step = () => {
+    if (!dnd.active) return;
+    const d = dnd.y < edge ? -12 : dnd.y > vh - edge - 70 ? 12 : 0;
+    if (d) { window.scrollBy(0, d); dnd.scrollRaf = requestAnimationFrame(step); }
+  };
+  step();
+}
+async function dndEnd(cancel) {
+  clearTimeout(dnd.timer); dnd.timer = null;
+  if (!dnd.active) { dnd.src = null; return; }
+  dnd.active = false;
+  dnd.endAt = Date.now();
+  cancelAnimationFrame(dnd.scrollRaf);
+  document.body.classList.remove('dnd-on');
+  dnd.ghost?.remove(); dnd.line?.remove();
+  $$('.dnd-src').forEach((r) => r.classList.remove('dnd-src'));
+  const id = dnd.src?.dataset.task, sec = dnd.target;
+  dnd.src = null;
+  if (cancel || !id || !sec) return;
+  const t = byId(id);
+  if (!t) return;
+  const ids = dndRows(sec).map((r) => r.dataset.task).filter((x) => x !== id);
+  const at = dnd.before ? ids.indexOf(dnd.before.dataset.task) : ids.length;
+  ids.splice(at < 0 ? ids.length : at, 0, id);
+  const projectId = sec.dataset.dropProject;
+  const moved = t.project_id !== projectId;
+  // optimistic
+  ids.forEach((x, i) => { const y = byId(x); if (y) y.sort = (i + 1) * 10; });
+  if (moved) { t.project_id = projectId; for (const c of S.tasks) if (c.parent_id === id) c.project_id = projectId; }
+  render();
+  try {
+    await api('/tasks/reorder', { method: 'POST', body: { ids, ...(moved ? { move: { id, project_id: projectId } } : {}) } });
+    if (moved) toast(`Verschoben nach ${projectPath(projectId)}`);
+  } catch (e) {
+    toast(e instanceof OfflineError ? 'Offline – Sortieren geht nur mit Verbindung' : e.message);
+    refresh({ force: true });
+  }
+}
+function bindDnd() {
+  const pickRow = (e) => {
+    const row = e.target.closest('.section[data-drop-project] > .task:not(.sub)');
+    if (!row || e.target.closest('button, a, input, select, textarea')) return null;
+    return row;
+  };
+  // mouse
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const row = pickRow(e);
+    if (!row) return;
+    dnd.src = row; dnd.sx = e.clientX; dnd.sy = e.clientY;
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dnd.src) return;
+    if (!dnd.active) {
+      if (Math.hypot(e.clientX - dnd.sx, e.clientY - dnd.sy) < 6) return;
+      dndStart(dnd.src, e.clientX, e.clientY);
+    }
+    e.preventDefault();
+    dndMove(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', () => dndEnd(false));
+  // touch: long press
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    const row = pickRow(e);
+    if (!row) return;
+    const tt = e.touches[0];
+    dnd.sx = tt.clientX; dnd.sy = tt.clientY;
+    clearTimeout(dnd.timer);
+    dnd.timer = setTimeout(() => dndStart(row, dnd.sx, dnd.sy), 350);
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    const tt = e.touches[0];
+    if (!dnd.active) {
+      if (dnd.timer && Math.hypot(tt.clientX - dnd.sx, tt.clientY - dnd.sy) > 8) { clearTimeout(dnd.timer); dnd.timer = null; }
+      return;
+    }
+    e.preventDefault(); // no scrolling while dragging
+    dndMove(tt.clientX, tt.clientY);
+  }, { passive: false });
+  document.addEventListener('touchend', () => dndEnd(false));
+  document.addEventListener('touchcancel', () => dndEnd(true));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dnd.active) dndEnd(true); });
+  // the click that ends a drag must not open the task
+  document.addEventListener('click', (e) => { if (Date.now() - dnd.endAt < 350) { e.stopPropagation(); e.preventDefault(); } }, true);
+  // long press on iOS would otherwise open the text selection / callout
+  document.addEventListener('contextmenu', (e) => { if (dnd.active || dnd.timer) e.preventDefault(); });
 }
 
 // ---------------------------------------------------------------- due pop-up

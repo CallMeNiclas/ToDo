@@ -1093,3 +1093,12 @@ svg.fp-vi { width: 20px; height: 20px; }
 .fh-note { margin-top: 6px; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .fp-add .btn, .fp-main .btn { min-width: 0; padding-left: 6px; padding-right: 6px; }
 @media (max-width: 860px) { .fp-add .btn, .fp-main .btn { font-size: 15.5px; } .fp-main .btn svg { width: 16px; height: 16px; } }
+
+/* ---------- drag & drop ---------- */
+.dnd-ghost { position: fixed; z-index: 70; pointer-events: none; background: var(--surface); border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .22); transform: rotate(-1deg) scale(1.02); opacity: .96; content-visibility: visible; }
+@media (prefers-color-scheme: light) { .dnd-ghost { background: #fffdf9; } }
+.task.dnd-src { opacity: .25; }
+.dnd-line { height: 3px; border-radius: 2px; background: var(--accent); margin: 2px 12px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+body.dnd-on, body.dnd-on * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+.section[data-drop-project] > .task { -webkit-touch-callout: none; }
