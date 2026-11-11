@@ -615,10 +615,23 @@ mark { background: color-mix(in srgb, var(--p2) 30%, transparent); color: inheri
 @media (pointer: coarse) { .dlg-check input { width: 26px; height: 26px; } .dlg-check span { font-size: 16.5px; } }
 
 /* ---------- deadline ---------- */
-.t-meta .deadline { color: var(--p3); }
-.t-meta .deadline.soon, .deadline.soon { color: var(--p2); font-weight: 600; }
-.t-meta .deadline.overdue, .deadline.overdue { color: var(--danger); font-weight: 600; }
-.deadline-hint { font-size: 13px; color: var(--muted); }
+/* deadline flag: yellow (> 7 days) → orange (≤ 7) → red (≤ 3) → purple (today) → dark red (missed) */
+:root { --dl-far: #c99700; --dl-week: #f07800; --dl-near: #ff3b30; --dl-today: #a21cff; --dl-over: #a8180f; }
+@media (prefers-color-scheme: dark) { :root { --dl-far: #ffd60a; --dl-week: #ff9f0a; --dl-near: #ff453a; --dl-today: #c95cff; --dl-over: #ff6b5f; } }
+.deadline { font-weight: 600; }
+.deadline svg { fill: currentColor; }
+.deadline.dl-far { color: var(--dl-far); }
+.deadline.dl-week { color: var(--dl-week); }
+.deadline.dl-near { color: var(--dl-near); }
+.deadline.dl-today { color: var(--dl-today); font-weight: 750; }
+.deadline.dl-today svg { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--dl-today) 60%, transparent)); }
+.deadline.dl-over { color: var(--dl-over); font-weight: 750; }
+.t-meta .deadline.dl-today { background: color-mix(in srgb, var(--dl-today) 14%, transparent); border-radius: 6px; padding: 0 6px 0 4px; }
+svg.dl-head { color: var(--dl-near); fill: currentColor; }
+.qa-tokens .t-deadline { background: color-mix(in srgb, var(--dl-near) 14%, transparent); color: var(--dl-near); }
+.deadline-hint { font-size: 13px; color: var(--muted); font-weight: 600; }
+.deadline-hint.dl-far { color: var(--dl-far); } .deadline-hint.dl-week { color: var(--dl-week); } .deadline-hint.dl-near { color: var(--dl-near); }
+.deadline-hint.dl-today { color: var(--dl-today); } .deadline-hint.dl-over { color: var(--dl-over); }
 @media (pointer: coarse) { #add-reminder { max-width: none !important; } }
 
 /* ---------- dashboard ---------- */

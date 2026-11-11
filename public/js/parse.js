@@ -158,7 +158,7 @@ export function parseQuickAdd(text, ctx) {
         const startsWithDate = sub.title === '' || !rest.trim().startsWith(sub.title.split(' ')[0]);
         if (startsWithDate && consumed) {
           out.deadline = sub.due_date;
-          out.tokens.push({ type: 'deadline', label: '🎯 ' + relDate(sub.due_date, today) });
+          out.tokens.push({ type: 'deadline', label: '🚩 ' + relDate(sub.due_date, today) });
           s = s.slice(0, dm.index) + ' ' + s.slice(dm.index + dm[0].length).replace(consumed, ' ');
         }
       }

@@ -50,6 +50,7 @@ const P = {
   stop: '<rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/>',
   grid: '<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>',
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
+  dflag: '<path d="M5 21.5V3.6" stroke-width="2.2"/><path d="M5.6 4.2c2.2-1.3 4.4-1.3 6.6 0s4.4 1.3 6.6 0v9c-2.2 1.3-4.4 1.3-6.6 0s-4.4-1.3-6.6 0z" fill="currentColor" stroke-width="1.6"/>',
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>',
 };
 // ---------------------------------------------------------------- view symbols (filled, colored)
@@ -746,7 +747,9 @@ function dueClass(t) {
 function deadlineInfo(d) {
   const days = Math.round((Date.parse(d) - Date.parse(S.today)) / 86400000);
   const text = days < 0 ? `${-days} Tag${days === -1 ? '' : 'e'} drüber` : days === 0 ? 'Deadline heute' : days === 1 ? 'Deadline morgen' : days < 7 ? `Deadline ${relDate(d, S.today)}` : `Deadline ${+d.slice(8, 10)}.${+d.slice(5, 7)}.`;
-  return { days, text, cls: days < 0 ? 'overdue' : days <= 2 ? 'soon' : '' };
+  // further than a week: yellow · up to 7 days: orange · 3 days or less: red · today: purple · past: dark red
+  const cls = days < 0 ? 'dl-over' : days === 0 ? 'dl-today' : days <= 3 ? 'dl-near' : days <= 7 ? 'dl-week' : 'dl-far';
+  return { days, text, cls };
 }
 
 // subtask counts, built once per render instead of scanning all tasks for every row
@@ -760,7 +763,7 @@ function taskRow(t, { showProject = true, showDate = true, sub = false, showPare
   const meta = [];
   if (showDate && t.due_date) meta.push(`<span class="${dueClass(t)}">${icon('cal')}${relDate(t.due_date, S.today)}${t.due_time ? ' ' + t.due_time : ''}</span>`);
   else if (t.due_time) meta.push(`<span class="${dueClass(t)}">${icon('clock')}${t.due_time}</span>`);
-  if (t.deadline) { const di = deadlineInfo(t.deadline); meta.push(`<span class="deadline ${di.cls}" title="Deadline ${esc(t.deadline)}">${icon('target')}${di.text}</span>`); }
+  if (t.deadline) { const di = deadlineInfo(t.deadline); meta.push(`<span class="deadline ${di.cls}" title="Deadline ${esc(t.deadline)}">${icon('dflag')}${di.text}</span>`); }
   if (t.duration_min) meta.push(`<span>${icon('timer')}${fmtDuration(t.duration_min)}</span>`);
   if (t.recurrence) meta.push(`<span title="${esc(recurrenceLabel(t.recurrence))}">${icon('repeat')}</span>`);
   if (S.focus?.task_id === t.id) meta.push(`<span class="focus-on">${icon('timer')}Fokus läuft</span>`);
@@ -943,7 +946,7 @@ function viewWeek() {
         <div class="day-head"><div><div class="wd">${WD_SHORT[isoWeekday(d)]}${span === 1 ? ' · ' + relDate(d, S.today) : ''}</div><div class="dn">${+d.slice(8, 10)}.</div></div><div class="load">${dayTasks.length ? dayTasks.length + (dayTasks.length === 1 ? ' Aufgabe' : ' Aufgaben') : ''}${load ? '<br>' + fmtShort(load) : ''}</div></div>
         <div class="day-body">
           ${dayEv.map((e) => `<div class="ev" style="--c:${esc(e.color)}" data-url="${esc(e.url || '')}"><b>${esc(e.title)}</b><small>${e.allDay ? 'ganztägig' : timeOf(e.start) + '–' + timeOf(e.end)}</small></div>`).join('')}
-          ${dayTasks.map((t) => `<div class="wtask prio-${t.priority}" data-task="${t.id}" draggable="true"><button class="check" data-check="${t.id}" aria-label="Erledigen"></button><div class="tt">${esc(t.title)}<small>${[t.due_date < d ? '<span style="color:var(--danger)">überfällig</span>' : '', t.due_time || '', t.duration_min ? fmtDuration(t.duration_min) : '', t.recurrence ? '↻' : '', t.deadline ? `<span class="deadline ${deadlineInfo(t.deadline).cls}">🎯 ${+t.deadline.slice(8, 10)}.${+t.deadline.slice(5, 7)}.</span>` : ''].filter(Boolean).join(' · ')}</small></div></div>`).join('')}
+          ${dayTasks.map((t) => `<div class="wtask prio-${t.priority}" data-task="${t.id}" draggable="true"><button class="check" data-check="${t.id}" aria-label="Erledigen"></button><div class="tt">${esc(t.title)}<small>${[t.due_date < d ? '<span style="color:var(--danger)">überfällig</span>' : '', t.due_time || '', t.duration_min ? fmtDuration(t.duration_min) : '', t.recurrence ? '↻' : '', t.deadline ? `<span class="deadline ${deadlineInfo(t.deadline).cls}">${icon('dflag')}${+t.deadline.slice(8, 10)}.${+t.deadline.slice(5, 7)}.</span>` : ''].filter(Boolean).join(' · ')}</small></div></div>`).join('')}
           ${d >= S.today ? addInline({ due_date: d }, 'Hinzufügen') : ''}
         </div></div>`;
     }
@@ -1406,8 +1409,8 @@ function viewDashboard() {
 
   // deadlines
   const dls = scoped().filter((x) => x.deadline && x.deadline <= addDays(t, 7)).sort((a, b) => a.deadline.localeCompare(b.deadline));
-  fill('deadlines', `<div class="dcard-head"><h2>${icon('target')}Deadlines</h2><span class="meta">nächste 7 Tage</span></div>
-    ${dls.length ? `<div class="dcard-list">${dls.slice(0, 6).map((x) => taskRow(x)).join('')}</div>` : emptyHtml('🎯', 'Keine Deadlines in den nächsten 7 Tagen.')}`);
+  fill('deadlines', `<div class="dcard-head"><h2>${icon('dflag', 'class="dl-head"')}Deadlines</h2><span class="meta">nächste 7 Tage</span></div>
+    ${dls.length ? `<div class="dcard-list">${dls.slice(0, 6).map((x) => taskRow(x)).join('')}</div>` : emptyHtml('🚩', 'Keine Deadlines in den nächsten 7 Tagen.')}`);
 
   // agenda
   const drawAgenda = (data) => {
@@ -2052,7 +2055,7 @@ function renderDrawerNow() {
     <label>${icon('clock')}Uhrzeit</label>
     <div class="row"><input type="time" data-f="due_time" value="${t.due_time || ''}" ${t.due_date ? '' : 'disabled'}>${t.due_time ? `<button class="icon-btn sm" data-clear="due_time" aria-label="Uhrzeit entfernen">${icon('x')}</button>` : ''}</div>
 
-    <label>${icon('target')}Deadline</label>
+    <label>${icon('dflag')}Deadline</label>
     <div class="row"><input type="date" data-f="deadline" value="${t.deadline || ''}">${t.deadline ? `<button class="icon-btn sm" data-clear="deadline" aria-label="Deadline entfernen">${icon('x')}</button><span class="deadline-hint ${deadlineInfo(t.deadline).cls}">${deadlineInfo(t.deadline).text}</span>` : ''}</div>
 
     <label>${icon('play')}Fokus</label>

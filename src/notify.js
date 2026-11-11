@@ -78,7 +78,7 @@ async function notifyTask(env, task, { email, reason }) {
     ? (await env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(task.project_id).first())?.name
     : null;
   // title: what it is at a glance; body: when · where · how important, then the notes
-  const title = isDeadline ? `🎯 Deadline: ${task.title}` : `🔔 To-Do: ${task.title}`;
+  const title = isDeadline ? `🚩 Deadline: ${task.title}` : `🔔 To-Do: ${task.title}`;
   const facts = [
     reason.startsWith('Angekommen') || reason.startsWith('Verlassen') ? reason : '',
     isDeadline ? 'Deadline heute' : whenText(task, env.TIMEZONE),
@@ -95,7 +95,7 @@ async function notifyTask(env, task, { email, reason }) {
   let mailed = false;
   if (email) {
     try {
-      await sendMail(env, `${isDeadline ? '🎯' : '⏰'} ${task.title}`, mailHtml(task, origin, reason, (reason !== 'Erinnerung' ? reason + ' · ' : '') + previewText(task, env.TIMEZONE)));
+      await sendMail(env, `${isDeadline ? '🚩' : '⏰'} ${task.title}`, mailHtml(task, origin, reason, (reason !== 'Erinnerung' ? reason + ' · ' : '') + previewText(task, env.TIMEZONE)));
       mailed = true;
     } catch (e) {
       console.warn('mail failed', e.message);
@@ -121,7 +121,7 @@ export async function runDueNotifications(env) {
     if (late) continue; // skip anything hours late (e.g. after downtime)
     const task = await getTask(env, n.task_id);
     if (task && projects && contextOf(projects, task.project_id) === 'work') continue; // on holiday: no work reminders
-    if (task) await notifyTask(env, task, { email: !!n.email, reason: n.kind === 'deadline' ? '🎯 Deadline heute' : 'Erinnerung' });
+    if (task) await notifyTask(env, task, { email: !!n.email, reason: n.kind === 'deadline' ? '🚩 Deadline heute' : 'Erinnerung' });
   }
   // housekeeping: drop sent notifications older than 30 days
   if (now.getUTCMinutes() === 0) {

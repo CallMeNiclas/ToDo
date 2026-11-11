@@ -1,6 +1,6 @@
 // Service worker: offline app shell, push notifications, notification clicks.
-const CACHE = 'todo-shell-v42';
-const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/parse.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
+const CACHE = 'todo-shell-v43';
+const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/parse.js', '/manifest.webmanifest', '/icons/icon-v3.svg', '/icons/icon-v3-192.png'];
 
 self.addEventListener('install', (e) => {
   // cache: 'reload' bypasses the HTTP cache so a new version really gets the new files
@@ -48,7 +48,7 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     tag: data.tag,
     renotify: !!data.tag,
-    icon: '/icons/icon-192.png',
+    icon: '/icons/icon-v3-192.png',
     badge: '/icons/badge-72.png',
     data: { url: data.url || '/' },
   }));
